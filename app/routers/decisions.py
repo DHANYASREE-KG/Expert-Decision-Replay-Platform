@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
@@ -39,6 +40,7 @@ def create_decision(
         title=decision_data.title,
         problem_statement=decision_data.problem_statement,
         category=decision_data.category,
+        tags=decision_data.tags,
         status="Draft",
         created_by=current_user.id
     )
@@ -63,7 +65,7 @@ def create_decision(
     return decision
 
 
-# GET ALL / FILTER DECISIONS
+# GET ALL / SEARCH / FILTER DECISIONS
 @router.get(
     "",
     response_model=List[DecisionResponse]
@@ -74,6 +76,10 @@ def get_decisions(
         alias="status"
     ),
     category: Optional[str] = None,
+    search: Optional[str] = Query(
+        default=None,
+        min_length=1
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -87,6 +93,15 @@ def get_decisions(
     if category:
         query = query.filter(
             Decision.category == category
+        )
+
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                Decision.title.ilike(search_pattern),
+                Decision.problem_statement.ilike(search_pattern)
+            )
         )
 
     return query.all()
@@ -140,6 +155,7 @@ def update_decision(
         "title": decision.title,
         "problem_statement": decision.problem_statement,
         "category": decision.category,
+        "tags": decision.tags,
         "status": decision.status
     }
 
@@ -176,11 +192,13 @@ def update_decision(
     decision.title = decision_data.title
     decision.problem_statement = decision_data.problem_statement
     decision.category = decision_data.category
+    decision.tags = decision_data.tags
 
     new_values = {
         "title": decision.title,
         "problem_statement": decision.problem_statement,
         "category": decision.category,
+        "tags": decision.tags,
         "status": decision.status
     }
 
@@ -226,7 +244,7 @@ def update_decision_status(
 
     old_status = decision.status
 
-    decision.status = status_data.status.value
+    decision.status = status_data.status
 
     log_audit(
         db=db,

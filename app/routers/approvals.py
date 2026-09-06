@@ -61,7 +61,11 @@ def create_approval(
             detail="Reviewer not found"
         )
 
-    if reviewer.role not in ["Reviewer", "Manager", "Administrator"]:
+    if reviewer.role not in [
+        "Reviewer",
+        "Manager",
+        "Administrator"
+    ]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Selected user cannot be an approval reviewer"
@@ -98,8 +102,13 @@ def get_approvals(
     if current_user.role == "Employee":
         query = (
             query
-            .join(Decision, Approval.decision_id == Decision.id)
-            .filter(Decision.created_by == current_user.id)
+            .join(
+                Decision,
+                Approval.decision_id == Decision.id
+            )
+            .filter(
+                Decision.created_by == current_user.id
+            )
         )
 
     elif current_user.role == "Reviewer":
@@ -107,7 +116,10 @@ def get_approvals(
             Approval.reviewer_id == current_user.id
         )
 
-    elif current_user.role not in ["Manager", "Administrator"]:
+    elif current_user.role not in [
+        "Manager",
+        "Administrator"
+    ]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions"
@@ -226,14 +238,39 @@ def update_approval(
             detail="Manager, Reviewer or Administrator access required"
         )
 
+    decision = (
+        db.query(Decision)
+        .filter(Decision.id == approval.decision_id)
+        .first()
+    )
+
+    if not decision:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision not found"
+        )
+
     if approval_data.status is not None:
         approval.status = approval_data.status
 
-        if approval_data.status in ["Approved", "Rejected"]:
+        if approval_data.status in [
+            "Approved",
+            "Rejected"
+        ]:
             approval.completed_at = (
                 approval_data.completed_at
                 or datetime.now(timezone.utc)
             )
+
+            if approval_data.status == "Rejected":
+                decision.status = "Rejected"
+
+            elif approval_data.status == "Approved":
+                if approval.approval_level >= 2:
+                    decision.status = "Approved"
+                else:
+                    decision.status = "Under Review"
+
         elif approval_data.completed_at is not None:
             approval.completed_at = approval_data.completed_at
 
