@@ -1,5 +1,9 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.routers import (
     auth,
@@ -22,6 +26,9 @@ from app.routers import (
 app = FastAPI(
     title="Expert Decision Replay Platform"
 )
+
+frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
 
 # CORS Middleware
 app.add_middleware(
@@ -50,6 +57,4 @@ app.include_router(reports.router)
 
 @app.get("/")
 def root():
-    return {
-        "message": "Expert Decision Replay Platform API is running"
-    }
+    return FileResponse(frontend_dir / "index.html")
