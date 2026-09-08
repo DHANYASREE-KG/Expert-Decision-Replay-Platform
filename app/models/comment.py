@@ -1,6 +1,5 @@
-from datetime import datetime, timezone
-
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, Integer, Text, DateTime, ForeignKey
+from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -14,28 +13,40 @@ class Comment(Base):
     decision_id = Column(
         Integer,
         ForeignKey("decisions.id"),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
     user_id = Column(
         Integer,
         ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    thread_id = Column(
+        Integer,
+        ForeignKey("discussion_threads.id"),
+        nullable=True,
+        index=True
+    )
+
+    content = Column(
+        Text,
         nullable=False
     )
 
-    content = Column(String, nullable=False)
-
     created_at = Column(
         DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc)
+        server_default=func.now(),
+        nullable=False
     )
 
     updated_at = Column(
         DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc)
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False
     )
 
     decision = relationship(
@@ -45,5 +56,10 @@ class Comment(Base):
 
     user = relationship(
         "User",
+        back_populates="comments"
+    )
+
+    thread = relationship(
+        "DiscussionThread",
         back_populates="comments"
     )

@@ -1,1123 +1,364 @@
-from datetime import datetime
-from typing import Optional
-
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    Query,
-    status,
-)
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
+from typing import Optional
+from datetime import datetime
 
-from app.core.dependencies import get_current_user
-from app.db.database import get_db
+from app.db.session import get_db
+from app.core.security import get_current_user
 from app.models.user import User
+from app.services import report_service as svc
+from app.services.export_service import generate_pdf, generate_excel
 
-from app.schemas.reports.approval_report import (
-    ApprovalReportResponse,
-)
-from app.schemas.reports.audit_report import (
-    AuditReportResponse,
-)
-from app.schemas.reports.decision_report import (
-    DecisionReportResponse,
-)
-from app.schemas.reports.team_report import (
-    TeamReportResponse,
-)
+router = APIRouter(prefix="/reports", tags=["Reports"])
 
-from app.services.reports.approval_report_service import (
-    get_approval_report,
-)
-from app.services.reports.audit_report_service import (
-    get_audit_report,
-)
-from app.services.reports.decision_report_service import (
-    get_decision_report,
-)
-from app.services.reports.export_service import (
-    generate_excel,
-    generate_pdf,
-)
-from app.services.reports.team_report_service import (
-    get_team_report,
-)
+VALID_STATUSES = ["Draft", "Under Review", "Approved", "Rejected", "Archived"]
+VALID_SORT_FIELDS = ["created_at", "updated_at", "title"]
 
 
-router = APIRouter(
-    prefix="/reports",
-    tags=["Reports"],
-)
+def require_admin(current_user: User):
+    if current_user.role != "Administrator":
+        raise HTTPException(status_code=403, detail="Admin access required")
 
 
-VALID_SORT_FIELDS = {
-    "created_date",
-    "updated_date",
-    "title",
-    "approval_date",
-    "team_name",
-}
-
-
-VALID_SORT_ORDERS = {
-    "asc",
-    "desc",
-}
-
-
-VALID_DECISION_STATUSES = {
-    "Draft",
-    "Under Review",
-    "Approved",
-    "Rejected",
-    "Archived",
-}
-
-
-VALID_APPROVAL_STATUSES = {
-    "Pending",
-    "Approved",
-    "Rejected",
-}
-
-
-def validate_date_range(
-    date_from: Optional[datetime],
-    date_to: Optional[datetime],
-):
-    if date_from and date_to and date_from > date_to:
+def parse_date(date_str: str, field_name: str) -> datetime:
+    try:
+        return datetime.fromisoformat(date_str)
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "date_from must be earlier than "
-                "or equal to date_to"
-            ),
+            status_code=422,
+            detail=f"Invalid {field_name} format. Use YYYY-MM-DD."
         )
 
 
-def validate_sorting(
-    sort_by: str,
-    sort_order: str,
-):
-    if sort_by not in VALID_SORT_FIELDS:
+def get_dates(start_date, end_date):
+    start, end = None, None
+    if start_date:
+        start = parse_date(start_date, "start_date")
+    if end_date:
+        end = parse_date(end_date, "end_date")
+    if start and end and start > end:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Invalid sort_by. Allowed values: "
-                "created_date, updated_date, title, "
-                "approval_date, team_name"
-            ),
+            status_code=422,
+            detail="start_date must be before end_date"
         )
-
-    if sort_order not in VALID_SORT_ORDERS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "sort_order must be either "
-                "'asc' or 'desc'"
-            ),
-        )
+    return start, end
 
 
-def validate_report_access(
-    current_user: User,
-):
-    allowed_roles = {
-        "Employee",
-        "Reviewer",
-        "Manager",
-        "Administrator",
-    }
-
-    if current_user.role not in allowed_roles:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions",
-        )
-
-
-def validate_decision_status(
-    decision_status: Optional[str],
-):
-    if (
-        decision_status is not None
-        and decision_status
-        not in VALID_DECISION_STATUSES
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Invalid decision status. Allowed values: "
-                "Draft, Under Review, Approved, "
-                "Rejected, Archived"
-            ),
-        )
-
-
-def validate_approval_status(
-    approval_status: Optional[str],
-):
-    if (
-        approval_status is not None
-        and approval_status
-        not in VALID_APPROVAL_STATUSES
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Invalid approval status. Allowed values: "
-                "Pending, Approved, Rejected"
-            ),
-        )
-
-
-def build_filters(
-    **kwargs,
-):
-    return {
-        key: value
-        for key, value in kwargs.items()
-        if value is not None
-    }
-
-
-# ============================================================
-# DECISION REPORT
-# ============================================================
-
-@router.get(
-    "/decisions",
-    response_model=DecisionReportResponse,
-)
+@router.get("/decisions")
 def decision_report(
-    category: Optional[str] = Query(default=None),
-    decision_status: Optional[str] = Query(
-        default=None,
-        alias="status",
-    ),
-    created_by: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    date_from: Optional[datetime] = Query(
-        default=None,
-    ),
-    date_to: Optional[datetime] = Query(
-        default=None,
-    ),
-    tags: Optional[str] = Query(default=None),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    page_size: int = Query(
-        default=20,
-        ge=1,
-        le=100,
-    ),
-    sort_by: str = Query(
-        default="created_date",
-    ),
-    sort_order: str = Query(
-        default="desc",
-    ),
+    category: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    created_by: Optional[int] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    sort: str = Query("created_at"),
+    order: str = Query("desc"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    validate_report_access(current_user)
+    if status and status not in VALID_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid status. Valid values: {VALID_STATUSES}"
+        )
+    if sort not in VALID_SORT_FIELDS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid sort field. Valid fields: {VALID_SORT_FIELDS}"
+        )
+    if order not in ["asc", "desc"]:
+        raise HTTPException(status_code=422, detail="Order must be 'asc' or 'desc'")
 
-    validate_date_range(
-        date_from,
-        date_to,
-    )
+    start, end = get_dates(start_date, end_date)
 
-    validate_sorting(
-        sort_by,
-        sort_order,
-    )
-
-    validate_decision_status(
-        decision_status,
-    )
-
-    return get_decision_report(
-        db=db,
-        category=category,
-        status=decision_status,
-        created_by=created_by,
-        date_from=date_from,
-        date_to=date_to,
-        tags=tags,
-        page=page,
-        page_size=page_size,
-        sort_by=sort_by,
-        sort_order=sort_order,
+    return svc.get_decision_report(
+        db, category, status, created_by,
+        start, end, page, page_size, sort, order
     )
 
 
-# ============================================================
-# APPROVAL REPORT
-# ============================================================
+@router.get("/decisions/export/pdf")
+def decision_report_pdf(
+    category: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    created_by: Optional[int] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    start, end = get_dates(start_date, end_date)
+    data = svc.get_decision_report(db, category, status, created_by, start, end, 1, 1000)
 
-@router.get(
-    "/approvals",
-    response_model=ApprovalReportResponse,
-)
+    headers = ["ID", "Title", "Category", "Status", "Created By", "Created At", "Alternatives"]
+    rows = [
+        [
+            str(d["id"]), d["title"], d["category"], d["status"],
+            str(d["created_by"]), d["created_at"], str(d["alternatives_count"])
+        ]
+        for d in data["items"]
+    ]
+
+    pdf = generate_pdf("Decision Report", headers, rows, data["summary"])
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=decision_report.pdf"}
+    )
+
+
+@router.get("/decisions/export/excel")
+def decision_report_excel(
+    category: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    created_by: Optional[int] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    start, end = get_dates(start_date, end_date)
+    data = svc.get_decision_report(db, category, status, created_by, start, end, 1, 1000)
+
+    headers = ["ID", "Title", "Category", "Status", "Created By", "Created At", "Alternatives"]
+    rows = [
+        [
+            d["id"], d["title"], d["category"], d["status"],
+            d["created_by"], d["created_at"], d["alternatives_count"]
+        ]
+        for d in data["items"]
+    ]
+
+    excel = generate_excel("Decision Report", headers, rows, data["summary"])
+    return Response(
+        content=excel,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=decision_report.xlsx"}
+    )
+
+
+
+@router.get("/approvals")
 def approval_report(
-    approval_status: Optional[str] = Query(
-        default=None,
-    ),
-    reviewer_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    decision_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    approval_level: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    date_from: Optional[datetime] = Query(
-        default=None,
-    ),
-    date_to: Optional[datetime] = Query(
-        default=None,
-    ),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    page_size: int = Query(
-        default=20,
-        ge=1,
-        le=100,
-    ),
-    sort_by: str = Query(
-        default="approval_date",
-    ),
-    sort_order: str = Query(
-        default="desc",
-    ),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    validate_report_access(current_user)
+    start, end = get_dates(start_date, end_date)
+    return svc.get_approval_report(db, start, end, page, page_size)
 
-    validate_date_range(
-        date_from,
-        date_to,
+
+@router.get("/approvals/export/pdf")
+def approval_report_pdf(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    start, end = get_dates(start_date, end_date)
+    data = svc.get_approval_report(db, start, end, 1, 1000)
+
+    headers = ["Decision ID", "Title", "Status", "Created By", "Created At"]
+    rows = [
+        [
+            str(d["decision_id"]), d["decision_title"], d["status"],
+            str(d["created_by"]), d["created_at"]
+        ]
+        for d in data["items"]
+    ]
+
+    pdf = generate_pdf("Approval Report", headers, rows, data["summary"])
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=approval_report.pdf"}
     )
 
-    validate_sorting(
-        sort_by,
-        sort_order,
+
+@router.get("/approvals/export/excel")
+def approval_report_excel(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    start, end = get_dates(start_date, end_date)
+    data = svc.get_approval_report(db, start, end, 1, 1000)
+
+    headers = ["Decision ID", "Title", "Status", "Created By", "Created At"]
+    rows = [
+        [
+            d["decision_id"], d["decision_title"], d["status"],
+            d["created_by"], d["created_at"]
+        ]
+        for d in data["items"]
+    ]
+
+    excel = generate_excel("Approval Report", headers, rows, data["summary"])
+    return Response(
+        content=excel,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=approval_report.xlsx"}
     )
 
-    validate_approval_status(
-        approval_status,
-    )
-
-    return get_approval_report(
-        db=db,
-        approval_status=approval_status,
-        reviewer_id=reviewer_id,
-        decision_id=decision_id,
-        approval_level=approval_level,
-        date_from=date_from,
-        date_to=date_to,
-        page=page,
-        page_size=page_size,
-        sort_by=sort_by,
-        sort_order=sort_order,
-    )
 
 
-# ============================================================
-# TEAM REPORT
-# ============================================================
-
-@router.get(
-    "/teams",
-    response_model=TeamReportResponse,
-)
+@router.get("/teams")
 def team_report(
-    team_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    date_from: Optional[datetime] = Query(
-        default=None,
-    ),
-    date_to: Optional[datetime] = Query(
-        default=None,
-    ),
-    decision_status: Optional[str] = Query(
-        default=None,
-        alias="status",
-    ),
-    category: Optional[str] = Query(default=None),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    page_size: int = Query(
-        default=20,
-        ge=1,
-        le=100,
-    ),
-    sort_by: str = Query(
-        default="team_name",
-    ),
-    sort_order: str = Query(
-        default="asc",
-    ),
+    department: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    validate_report_access(current_user)
+    start, end = get_dates(start_date, end_date)
+    return svc.get_team_report(db, department, start, end, page, page_size)
 
-    validate_date_range(
-        date_from,
-        date_to,
+
+@router.get("/teams/export/pdf")
+def team_report_pdf(
+    department: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    start, end = get_dates(start_date, end_date)
+    data = svc.get_team_report(db, department, start, end, 1, 1000)
+
+    headers = ["Department", "Members", "Total", "Approved", "Rejected", "Pending", "Draft"]
+    rows = [
+        [
+            d["department"], str(d["member_count"]), str(d["total_decisions"]),
+            str(d["approved_decisions"]), str(d["rejected_decisions"]),
+            str(d["pending_decisions"]), str(d["draft_decisions"])
+        ]
+        for d in data["items"]
+    ]
+
+    pdf = generate_pdf("Team Report", headers, rows)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=team_report.pdf"}
     )
 
-    validate_sorting(
-        sort_by,
-        sort_order,
+
+@router.get("/teams/export/excel")
+def team_report_excel(
+    department: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    start, end = get_dates(start_date, end_date)
+    data = svc.get_team_report(db, department, start, end, 1, 1000)
+
+    headers = ["Department", "Members", "Total", "Approved", "Rejected", "Pending", "Draft"]
+    rows = [
+        [
+            d["department"], d["member_count"], d["total_decisions"],
+            d["approved_decisions"], d["rejected_decisions"],
+            d["pending_decisions"], d["draft_decisions"]
+        ]
+        for d in data["items"]
+    ]
+
+    excel = generate_excel("Team Report", headers, rows)
+    return Response(
+        content=excel,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=team_report.xlsx"}
     )
 
-    validate_decision_status(
-        decision_status,
-    )
-
-    return get_team_report(
-        db=db,
-        team_id=team_id,
-        date_from=date_from,
-        date_to=date_to,
-        decision_status=decision_status,
-        category=category,
-        page=page,
-        page_size=page_size,
-        sort_by=sort_by,
-        sort_order=sort_order,
-    )
 
 
-# ============================================================
-# AUDIT REPORT
-# ============================================================
-
-@router.get(
-    "/audit",
-    response_model=AuditReportResponse,
-)
+@router.get("/audit")
 def audit_report(
-    user_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    action: Optional[str] = Query(default=None),
-    entity_type: Optional[str] = Query(
-        default=None,
-    ),
-    entity_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    date_from: Optional[datetime] = Query(
-        default=None,
-    ),
-    date_to: Optional[datetime] = Query(
-        default=None,
-    ),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    page_size: int = Query(
-        default=20,
-        ge=1,
-        le=100,
-    ),
-    sort_by: str = Query(
-        default="created_date",
-    ),
-    sort_order: str = Query(
-        default="desc",
-    ),
+    user_id: Optional[int] = Query(None),
+    action: Optional[str] = Query(None),
+    entity_type: Optional[str] = Query(None),
+    entity_id: Optional[int] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role != "Administrator":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Administrator access required",
-        )
-
-    validate_date_range(
-        date_from,
-        date_to,
-    )
-
-    if sort_by != "created_date":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Invalid sort_by. "
-                "Allowed value: created_date"
-            ),
-        )
-
-    if sort_order not in VALID_SORT_ORDERS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "sort_order must be either "
-                "'asc' or 'desc'"
-            ),
-        )
-
-    return get_audit_report(
-        db=db,
-        user_id=user_id,
-        action=action,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        date_from=date_from,
-        date_to=date_to,
-        page=page,
-        page_size=page_size,
-        sort_by=sort_by,
-        sort_order=sort_order,
-    )
+    require_admin(current_user)
+    start, end = get_dates(start_date, end_date)
+    return svc.get_audit_report(db, user_id, action, entity_type, entity_id, start, end, page, page_size)
 
 
-# ============================================================
-# DECISION EXPORTS
-# ============================================================
-
-@router.get(
-    "/decisions/export/excel"
-)
-def export_decisions_excel(
-    category: Optional[str] = Query(default=None),
-    decision_status: Optional[str] = Query(
-        default=None,
-        alias="status",
-    ),
-    created_by: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    date_from: Optional[datetime] = Query(default=None),
-    date_to: Optional[datetime] = Query(default=None),
-    tags: Optional[str] = Query(default=None),
+@router.get("/audit/export/pdf")
+def audit_report_pdf(
+    user_id: Optional[int] = Query(None),
+    action: Optional[str] = Query(None),
+    entity_type: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    validate_report_access(current_user)
-    validate_date_range(date_from, date_to)
-    validate_decision_status(decision_status)
+    require_admin(current_user)
+    start, end = get_dates(start_date, end_date)
+    data = svc.get_audit_report(db, user_id, action, entity_type, None, start, end, 1, 1000)
 
-    report = get_decision_report(
-        db=db,
-        category=category,
-        status=decision_status,
-        created_by=created_by,
-        date_from=date_from,
-        date_to=date_to,
-        tags=tags,
-        page=1,
-        page_size=10000,
-        sort_by="created_date",
-        sort_order="desc",
-    )
-
-    columns = [
-        "decision_id",
-        "title",
-        "category",
-        "status",
-        "created_by",
-        "created_date",
-        "updated_date",
-        "number_of_alternatives",
-        "number_of_approvals",
-        "tags",
+    headers = ["ID", "User ID", "Action", "Entity Type", "Entity ID", "Description", "Created At"]
+    rows = [
+        [
+            str(a["id"]), str(a["user_id"]), a["action"],
+            str(a["entity_type"]), str(a["entity_id"]),
+            str(a["description"]), a["created_at"]
+        ]
+        for a in data["items"]
     ]
 
-    output = generate_excel(
-        title="Decision Report",
-        columns=columns,
-        rows=report["data"],
-        filters=build_filters(
-            category=category,
-            status=decision_status,
-            created_by=created_by,
-            date_from=date_from,
-            date_to=date_to,
-            tags=tags,
-        ),
-        summary=report["summary"],
-    )
-
-    return StreamingResponse(
-        output,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        ),
-        headers={
-            "Content-Disposition": (
-                'attachment; filename="decision_report.xlsx"'
-            )
-        },
-    )
-
-
-@router.get(
-    "/decisions/export/pdf"
-)
-def export_decisions_pdf(
-    category: Optional[str] = Query(default=None),
-    decision_status: Optional[str] = Query(
-        default=None,
-        alias="status",
-    ),
-    created_by: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    date_from: Optional[datetime] = Query(default=None),
-    date_to: Optional[datetime] = Query(default=None),
-    tags: Optional[str] = Query(default=None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    validate_report_access(current_user)
-    validate_date_range(date_from, date_to)
-    validate_decision_status(decision_status)
-
-    report = get_decision_report(
-        db=db,
-        category=category,
-        status=decision_status,
-        created_by=created_by,
-        date_from=date_from,
-        date_to=date_to,
-        tags=tags,
-        page=1,
-        page_size=10000,
-        sort_by="created_date",
-        sort_order="desc",
-    )
-
-    columns = [
-        "decision_id",
-        "title",
-        "category",
-        "status",
-        "created_by",
-        "created_date",
-        "updated_date",
-        "number_of_alternatives",
-        "number_of_approvals",
-        "tags",
-    ]
-
-    output = generate_pdf(
-        title="Decision Report",
-        columns=columns,
-        rows=report["data"],
-        filters=build_filters(
-            category=category,
-            status=decision_status,
-            created_by=created_by,
-            date_from=date_from,
-            date_to=date_to,
-            tags=tags,
-        ),
-        summary=report["summary"],
-    )
-
-    return StreamingResponse(
-        output,
+    pdf = generate_pdf("Audit Report", headers, rows)
+    return Response(
+        content=pdf,
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": (
-                'attachment; filename="decision_report.pdf"'
-            )
-        },
+        headers={"Content-Disposition": "attachment; filename=audit_report.pdf"}
     )
 
 
-# ============================================================
-# APPROVAL EXPORTS
-# ============================================================
-
-@router.get(
-    "/approvals/export/excel"
-)
-def export_approvals_excel(
-    approval_status: Optional[str] = Query(default=None),
-    reviewer_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    decision_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    approval_level: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    date_from: Optional[datetime] = Query(default=None),
-    date_to: Optional[datetime] = Query(default=None),
+@router.get("/audit/export/excel")
+def audit_report_excel(
+    user_id: Optional[int] = Query(None),
+    action: Optional[str] = Query(None),
+    entity_type: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    validate_report_access(current_user)
-    validate_date_range(date_from, date_to)
-    validate_approval_status(approval_status)
+    require_admin(current_user)
+    start, end = get_dates(start_date, end_date)
+    data = svc.get_audit_report(db, user_id, action, entity_type, None, start, end, 1, 1000)
 
-    report = get_approval_report(
-        db=db,
-        approval_status=approval_status,
-        reviewer_id=reviewer_id,
-        decision_id=decision_id,
-        approval_level=approval_level,
-        date_from=date_from,
-        date_to=date_to,
-        page=1,
-        page_size=10000,
-        sort_by="approval_date",
-        sort_order="desc",
-    )
-
-    columns = [
-        "approval_id",
-        "decision_id",
-        "decision_title",
-        "reviewer",
-        "approval_level",
-        "approval_status",
-        "assigned_date",
-        "completed_date",
-        "approval_turnaround_time",
+    headers = ["ID", "User ID", "Action", "Entity Type", "Entity ID", "Description", "Created At"]
+    rows = [
+        [
+            a["id"], a["user_id"], a["action"],
+            a["entity_type"], a["entity_id"],
+            a["description"], a["created_at"]
+        ]
+        for a in data["items"]
     ]
 
-    output = generate_excel(
-        title="Approval Report",
-        columns=columns,
-        rows=report["data"],
-        filters=build_filters(
-            approval_status=approval_status,
-            reviewer_id=reviewer_id,
-            decision_id=decision_id,
-            approval_level=approval_level,
-            date_from=date_from,
-            date_to=date_to,
-        ),
-        summary=report["stats"],
-    )
-
-    return StreamingResponse(
-        output,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        ),
-        headers={
-            "Content-Disposition": (
-                'attachment; filename="approval_report.xlsx"'
-            )
-        },
-    )
-
-
-@router.get(
-    "/approvals/export/pdf"
-)
-def export_approvals_pdf(
-    approval_status: Optional[str] = Query(default=None),
-    reviewer_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    decision_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    approval_level: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    date_from: Optional[datetime] = Query(default=None),
-    date_to: Optional[datetime] = Query(default=None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    validate_report_access(current_user)
-    validate_date_range(date_from, date_to)
-    validate_approval_status(approval_status)
-
-    report = get_approval_report(
-        db=db,
-        approval_status=approval_status,
-        reviewer_id=reviewer_id,
-        decision_id=decision_id,
-        approval_level=approval_level,
-        date_from=date_from,
-        date_to=date_to,
-        page=1,
-        page_size=10000,
-        sort_by="approval_date",
-        sort_order="desc",
-    )
-
-    columns = [
-        "approval_id",
-        "decision_id",
-        "decision_title",
-        "reviewer",
-        "approval_level",
-        "approval_status",
-        "assigned_date",
-        "completed_date",
-        "approval_turnaround_time",
-    ]
-
-    output = generate_pdf(
-        title="Approval Report",
-        columns=columns,
-        rows=report["data"],
-        filters=build_filters(
-            approval_status=approval_status,
-            reviewer_id=reviewer_id,
-            decision_id=decision_id,
-            approval_level=approval_level,
-            date_from=date_from,
-            date_to=date_to,
-        ),
-        summary=report["stats"],
-    )
-
-    return StreamingResponse(
-        output,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": (
-                'attachment; filename="approval_report.pdf"'
-            )
-        },
-    )
-
-
-# ============================================================
-# TEAM EXPORTS
-# ============================================================
-
-@router.get(
-    "/teams/export/excel"
-)
-def export_teams_excel(
-    team_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    date_from: Optional[datetime] = Query(default=None),
-    date_to: Optional[datetime] = Query(default=None),
-    decision_status: Optional[str] = Query(
-        default=None,
-        alias="status",
-    ),
-    category: Optional[str] = Query(default=None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    validate_report_access(current_user)
-    validate_date_range(date_from, date_to)
-    validate_decision_status(decision_status)
-
-    report = get_team_report(
-        db=db,
-        team_id=team_id,
-        date_from=date_from,
-        date_to=date_to,
-        decision_status=decision_status,
-        category=category,
-        page=1,
-        page_size=10000,
-        sort_by="team_name",
-        sort_order="asc",
-    )
-
-    columns = [
-        "team_name",
-        "number_of_members",
-        "total_decisions",
-        "approved_decisions",
-        "rejected_decisions",
-        "pending_decisions",
-        "approval_rate",
-    ]
-
-    output = generate_excel(
-        title="Team Report",
-        columns=columns,
-        rows=report["data"],
-        filters=build_filters(
-            team_id=team_id,
-            date_from=date_from,
-            date_to=date_to,
-            status=decision_status,
-            category=category,
-        ),
-    )
-
-    return StreamingResponse(
-        output,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        ),
-        headers={
-            "Content-Disposition": (
-                'attachment; filename="team_report.xlsx"'
-            )
-        },
-    )
-
-
-@router.get(
-    "/teams/export/pdf"
-)
-def export_teams_pdf(
-    team_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    date_from: Optional[datetime] = Query(default=None),
-    date_to: Optional[datetime] = Query(default=None),
-    decision_status: Optional[str] = Query(
-        default=None,
-        alias="status",
-    ),
-    category: Optional[str] = Query(default=None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    validate_report_access(current_user)
-    validate_date_range(date_from, date_to)
-    validate_decision_status(decision_status)
-
-    report = get_team_report(
-        db=db,
-        team_id=team_id,
-        date_from=date_from,
-        date_to=date_to,
-        decision_status=decision_status,
-        category=category,
-        page=1,
-        page_size=10000,
-        sort_by="team_name",
-        sort_order="asc",
-    )
-
-    columns = [
-        "team_name",
-        "number_of_members",
-        "total_decisions",
-        "approved_decisions",
-        "rejected_decisions",
-        "pending_decisions",
-        "approval_rate",
-    ]
-
-    output = generate_pdf(
-        title="Team Report",
-        columns=columns,
-        rows=report["data"],
-        filters=build_filters(
-            team_id=team_id,
-            date_from=date_from,
-            date_to=date_to,
-            status=decision_status,
-            category=category,
-        ),
-    )
-
-    return StreamingResponse(
-        output,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": (
-                'attachment; filename="team_report.pdf"'
-            )
-        },
-    )
-
-
-# ============================================================
-# AUDIT EXPORTS
-# ============================================================
-
-@router.get(
-    "/audit/export/excel"
-)
-def export_audit_excel(
-    user_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    action: Optional[str] = Query(default=None),
-    entity_type: Optional[str] = Query(default=None),
-    entity_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    date_from: Optional[datetime] = Query(default=None),
-    date_to: Optional[datetime] = Query(default=None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    if current_user.role != "Administrator":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Administrator access required",
-        )
-
-    validate_date_range(date_from, date_to)
-
-    report = get_audit_report(
-        db=db,
-        user_id=user_id,
-        action=action,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        date_from=date_from,
-        date_to=date_to,
-        page=1,
-        page_size=10000,
-        sort_by="created_date",
-        sort_order="desc",
-    )
-
-    columns = [
-        "user",
-        "action",
-        "entity_type",
-        "entity_id",
-        "description",
-        "timestamp",
-        "ip_address",
-    ]
-
-    output = generate_excel(
-        title="Audit Report",
-        columns=columns,
-        rows=report["data"],
-        filters=build_filters(
-            user_id=user_id,
-            action=action,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            date_from=date_from,
-            date_to=date_to,
-        ),
-    )
-
-    return StreamingResponse(
-        output,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        ),
-        headers={
-            "Content-Disposition": (
-                'attachment; filename="audit_report.xlsx"'
-            )
-        },
-    )
-
-
-@router.get(
-    "/audit/export/pdf"
-)
-def export_audit_pdf(
-    user_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    action: Optional[str] = Query(default=None),
-    entity_type: Optional[str] = Query(default=None),
-    entity_id: Optional[int] = Query(
-        default=None,
-        ge=1,
-    ),
-    date_from: Optional[datetime] = Query(default=None),
-    date_to: Optional[datetime] = Query(default=None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    if current_user.role != "Administrator":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Administrator access required",
-        )
-
-    validate_date_range(date_from, date_to)
-
-    report = get_audit_report(
-        db=db,
-        user_id=user_id,
-        action=action,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        date_from=date_from,
-        date_to=date_to,
-        page=1,
-        page_size=10000,
-        sort_by="created_date",
-        sort_order="desc",
-    )
-
-    columns = [
-        "user",
-        "action",
-        "entity_type",
-        "entity_id",
-        "description",
-        "timestamp",
-        "ip_address",
-    ]
-
-    output = generate_pdf(
-        title="Audit Report",
-        columns=columns,
-        rows=report["data"],
-        filters=build_filters(
-            user_id=user_id,
-            action=action,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            date_from=date_from,
-            date_to=date_to,
-        ),
-    )
-
-    return StreamingResponse(
-        output,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": (
-                'attachment; filename="audit_report.pdf"'
-            )
-        },
+    excel = generate_excel("Audit Report", headers, rows)
+    return Response(
+        content=excel,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=audit_report.xlsx"}
     )

@@ -1,69 +1,55 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers.alternatives import router as alternatives_router
-from app.routers.users import router as user_router
-from app.routers.auth import router as auth_router
-from app.routers.decisions import router as decision_router
-from app.routers.discussion_threads import router as discussion_threads_router
-from app.routers.thread_replies import router as thread_replies_router
-from app.routers.meeting_notes import router as meeting_notes_router
-from app.routers.decision_rationale import router as rationale_router
-from app.routers.comments import router as comments_router
-from app.routers.activities import router as activities_router
-from app.routers.audit_logs import router as audit_logs_router
-from app.routers.dashboard import router as dashboard_router
-from app.routers.approvals import router as approvals_router
-from app.routers.reports import router as reports_router
+from app.routers import (
+    auth,
+    user,
+    decision,
+    alternative,
+    comment,
+    discussion_thread,
+    meeting_notes,
+    rationale,
+    tags,
+    timeline,
+    decision_version,
+    dashboard,
+    activities,
+    audit_logs,
+    reports,
+)
 
 app = FastAPI(
     title="Expert Decision Replay Platform"
 )
-from pathlib import Path
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
-app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
 
-@app.get("/", include_in_schema=False)
-def frontend():
-    return FileResponse(frontend_dir / "index.html")
+# CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+app.include_router(auth.router)
+app.include_router(user.router)
+app.include_router(decision.router)
+app.include_router(alternative.router)
+app.include_router(comment.router)
+app.include_router(discussion_thread.router)
+app.include_router(meeting_notes.router)
+app.include_router(rationale.router)
+app.include_router(tags.router)
+app.include_router(timeline.router)
+app.include_router(decision_version.router)
+app.include_router(dashboard.router)
+app.include_router(activities.router)
+app.include_router(audit_logs.router)
+app.include_router(reports.router)
 
-# User Management
-app.include_router(user_router)
-
-# Authentication
-app.include_router(auth_router)
-
-# Decision Management
-app.include_router(decision_router)
-
-# Alternative Analysis
-app.include_router(alternatives_router)
-
-# Discussion Module
-app.include_router(discussion_threads_router)
-app.include_router(thread_replies_router)
-
-# Meeting Notes
-app.include_router(meeting_notes_router)
-
-# Decision Rationale
-app.include_router(rationale_router)
-
-# Comments
-app.include_router(comments_router)
-
-# Dashboard
-app.include_router(dashboard_router)
-
-# Activity Logging
-app.include_router(activities_router)
-
-# Audit & Compliance
-app.include_router(audit_logs_router)
-
-# Approval Workflow
-app.include_router(approvals_router)
-# Reports and Export Module
-app.include_router(reports_router)
+@app.get("/")
+def root():
+    return {
+        "message": "Expert Decision Replay Platform API is running"
+    }

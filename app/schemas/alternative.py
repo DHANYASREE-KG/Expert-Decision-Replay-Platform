@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RiskLevel(str, Enum):
@@ -16,17 +16,7 @@ class AlternativeCreate(BaseModel):
     description: str
     pros: str
     cons: str
-    estimated_cost: int
-    feasibility_score: int = Field(ge=1, le=5)
-    risk_level: RiskLevel
-
-
-class AlternativeUpdate(BaseModel):
-    name: str
-    description: str
-    pros: str
-    cons: str
-    estimated_cost: int
+    estimated_cost: float = Field(ge=0)
     feasibility_score: int = Field(ge=1, le=5)
     risk_level: RiskLevel
 
@@ -38,11 +28,10 @@ class AlternativeResponse(BaseModel):
     description: str
     pros: str
     cons: str
-    estimated_cost: int
+    estimated_cost: float
     feasibility_score: int
     risk_level: RiskLevel
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

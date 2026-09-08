@@ -1,41 +1,44 @@
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List, Dict
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
 
 
-class ActivityResponse(BaseModel):
+class ActivityOut(BaseModel):
     id: int
-    user_id: int | None
+    user_id: int
     action: str
-    entity_type: str
-    entity_id: int | None
-    description: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[int] = None
+    description: Optional[str] = None
     created_at: datetime
+
     model_config = ConfigDict(from_attributes=True)
 
 
-class ApprovalResponse(BaseModel):
-    id: int
-    decision_id: int
-    approval_level: int
-    reviewer_id: int
-    status: str
-    created_at: datetime
-    completed_at: datetime | None
-    model_config = ConfigDict(from_attributes=True)
+class EmployeeDashboard(BaseModel):
+    total_decisions: int
+    draft_decisions: int
+    under_review: int
+    approved_decisions: int
+    rejected_decisions: int
+    pending_reviews: int
+    recent_activities: List[ActivityOut]
 
 
-class PaginatedActivityResponse(BaseModel):
-    items: list[ActivityResponse]
-    page: int
-    page_size: int
-    total: int
+class ManagerDashboard(BaseModel):
+    team_decisions: int
+    pending_approvals: int
+    approved_decisions: int
+    rejected_decisions: int
+    under_review: int
 
 
-class ApprovalCreate(BaseModel):
-    decision_id: int
-    reviewer_id: int
-    approval_level: int = Field(default=1, ge=1)
-
-
-class ApprovalDecision(BaseModel):
-    decision: str
+class AdminDashboard(BaseModel):
+    total_users: int
+    total_decisions: int
+    pending_approvals: int
+    approved_decisions: int
+    rejected_decisions: int
+    under_review: int
+    total_approvals: int
+    completion_rate: float

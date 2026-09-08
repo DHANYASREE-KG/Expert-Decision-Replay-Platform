@@ -1,364 +1,141 @@
-from datetime import datetime
-from typing import Optional
-
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    Query,
-    status
-)
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from typing import Optional
+from datetime import datetime
 
-from app.core.dependencies import get_current_user
-from app.db.database import get_db
-from app.models.activity import Activity
-from app.models.decision import Decision
+from app.db.session import get_db
+from app.core.security import get_current_user
 from app.models.user import User
+from app.services import dashboard_service as svc
+
+router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
-router = APIRouter(
-    prefix="/dashboard",
-    tags=["Dashboard"]
-)
 
 
-# EMPLOYEE DASHBOARD
+def require_manager(current_user: User):
+    if current_user.role not in ("Manager", "Administrator"):
+        raise HTTPException(status_code=403, detail="Manager access required")
+    return current_user
+
+
+def require_admin(current_user: User):
+    if current_user.role != "Administrator":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
+
+
+def parse_dates(start_date: Optional[str], end_date: Optional[str]):
+    start, end = None, None
+    try:
+        if start_date:
+            start = datetime.fromisoformat(start_date)
+        if end_date:
+            end = datetime.fromisoformat(end_date)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
+    if start and end and start > end:
+        raise HTTPException(status_code=422, detail="start_date must be before end_date.")
+    return start, end
+
+
+
 @router.get("/employee")
 def employee_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    base_query = db.query(Decision).filter(
-        Decision.created_by == current_user.id
-    )
-
-    total_decisions = base_query.count()
-
-    draft_decisions = base_query.filter(
-        Decision.status == "Draft"
-    ).count()
-
-    under_review = base_query.filter(
-        Decision.status == "Under Review"
-    ).count()
-
-    approved_decisions = base_query.filter(
-        Decision.status == "Approved"
-    ).count()
-
-    rejected_decisions = base_query.filter(
-        Decision.status == "Rejected"
-    ).count()
-
-    recent_activities = (
-        db.query(Activity)
-        .filter(Activity.user_id == current_user.id)
-        .order_by(Activity.created_at.desc())
-        .limit(10)
-        .all()
-    )
-
-    return {
-        "total_decisions": total_decisions,
-        "draft_decisions": draft_decisions,
-        "under_review": under_review,
-        "approved_decisions": approved_decisions,
-        "rejected_decisions": rejected_decisions,
-        "pending_reviews": under_review,
-        "recent_activities": [
-            {
-                "id": activity.id,
-                "action": activity.action,
-                "entity_type": activity.entity_type,
-                "entity_id": activity.entity_id,
-                "description": activity.description,
-                "created_at": activity.created_at
-            }
-            for activity in recent_activities
-        ]
-    }
+    return svc.get_employee_dashboard(db, current_user.id)
 
 
-# MANAGER DASHBOARD
+@router.get("/employee/decisions")
+def employee_decisions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return svc.get_employee_decisions(db, current_user.id)
+
+
+@router.get("/employee/recent-activities")
+def employee_recent_activities(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return svc.get_employee_recent_activities(db, current_user.id)
+
+
+
+
 @router.get("/manager")
 def manager_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "Manager":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Manager access required"
-        )
-
-    team_decisions = (
-        db.query(Decision)
-        .join(User, Decision.created_by == User.id)
-        .filter(User.department == current_user.department)
-    )
-
-    total_decisions = team_decisions.count()
-
-    draft_decisions = team_decisions.filter(
-        Decision.status == "Draft"
-    ).count()
-
-    under_review = team_decisions.filter(
-        Decision.status == "Under Review"
-    ).count()
-
-    approved_decisions = team_decisions.filter(
-        Decision.status == "Approved"
-    ).count()
-
-    rejected_decisions = team_decisions.filter(
-        Decision.status == "Rejected"
-    ).count()
-
-    recent_activities = (
-        db.query(Activity)
-        .join(User, Activity.user_id == User.id)
-        .filter(User.department == current_user.department)
-        .order_by(Activity.created_at.desc())
-        .limit(10)
-        .all()
-    )
-
-    return {
-        "department": current_user.department,
-        "total_decisions": total_decisions,
-        "draft_decisions": draft_decisions,
-        "under_review": under_review,
-        "approved_decisions": approved_decisions,
-        "rejected_decisions": rejected_decisions,
-        "pending_approvals": under_review,
-        "recent_team_activities": [
-            {
-                "id": activity.id,
-                "user_id": activity.user_id,
-                "action": activity.action,
-                "entity_type": activity.entity_type,
-                "entity_id": activity.entity_id,
-                "description": activity.description,
-                "created_at": activity.created_at
-            }
-            for activity in recent_activities
-        ]
-    }
+    require_manager(current_user)
+    return svc.get_manager_dashboard(db, current_user)
 
 
-# ADMIN DASHBOARD
+@router.get("/manager/team-decisions")
+def manager_team_decisions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    require_manager(current_user)
+    return svc.get_manager_team_decisions(db, current_user)
+
+
+@router.get("/manager/statistics")
+def manager_statistics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    require_manager(current_user)
+    return svc.get_manager_statistics(db, current_user)
+
+
+
+
 @router.get("/admin")
 def admin_dashboard(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "Administrator":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Administrator access required"
-        )
-
-    total_users = db.query(User).count()
-    total_decisions = db.query(Decision).count()
-
-    draft_decisions = db.query(Decision).filter(
-        Decision.status == "Draft"
-    ).count()
-
-    under_review = db.query(Decision).filter(
-        Decision.status == "Under Review"
-    ).count()
-
-    approved_decisions = db.query(Decision).filter(
-        Decision.status == "Approved"
-    ).count()
-
-    rejected_decisions = db.query(Decision).filter(
-        Decision.status == "Rejected"
-    ).count()
-
-    recent_activities = (
-        db.query(Activity)
-        .order_by(Activity.created_at.desc())
-        .limit(10)
-        .all()
-    )
-
-    return {
-        "total_users": total_users,
-        "total_decisions": total_decisions,
-        "draft_decisions": draft_decisions,
-        "under_review": under_review,
-        "approved_decisions": approved_decisions,
-        "rejected_decisions": rejected_decisions,
-        "recent_activities": [
-            {
-                "id": activity.id,
-                "user_id": activity.user_id,
-                "action": activity.action,
-                "entity_type": activity.entity_type,
-                "entity_id": activity.entity_id,
-                "description": activity.description,
-                "created_at": activity.created_at
-            }
-            for activity in recent_activities
-        ]
-    }
+    require_admin(current_user)
+    start, end = parse_dates(start_date, end_date)
+    return svc.get_admin_dashboard(db, start, end)
 
 
-# DECISION STATISTICS
-@router.get("/decision-statistics")
-def decision_statistics(
-    start_date: Optional[datetime] = Query(default=None),
-    end_date: Optional[datetime] = Query(default=None),
+@router.get("/admin/analytics")
+def admin_analytics(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role not in ["Manager", "Administrator"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Manager or Administrator access required"
-        )
-
-    query = db.query(Decision)
-
-    if current_user.role == "Manager":
-        query = (
-            query
-            .join(User, Decision.created_by == User.id)
-            .filter(User.department == current_user.department)
-        )
-
-    if start_date:
-        query = query.filter(
-            Decision.created_at >= start_date
-        )
-
-    if end_date:
-        query = query.filter(
-            Decision.created_at <= end_date
-        )
-
-    return {
-        "total_decisions": query.count(),
-        "draft": query.filter(
-            Decision.status == "Draft"
-        ).count(),
-        "under_review": query.filter(
-            Decision.status == "Under Review"
-        ).count(),
-        "approved": query.filter(
-            Decision.status == "Approved"
-        ).count(),
-        "rejected": query.filter(
-            Decision.status == "Rejected"
-        ).count(),
-        "archived": query.filter(
-            Decision.status == "Archived"
-        ).count()
-    }
+    require_admin(current_user)
+    start, end = parse_dates(start_date, end_date)
+    return svc.get_admin_analytics(db, start, end)
 
 
-# ACTIVITY STATISTICS
-@router.get("/activity-statistics")
-def activity_statistics(
-    start_date: Optional[datetime] = Query(default=None),
-    end_date: Optional[datetime] = Query(default=None),
+@router.get("/admin/decision-activity")
+def admin_decision_activity(
+    group_by: str = Query("day", pattern="^(day|week|month)$"),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role not in ["Manager", "Administrator"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Manager or Administrator access required"
-        )
-
-    query = db.query(Activity)
-
-    if current_user.role == "Manager":
-        query = (
-            query
-            .join(User, Activity.user_id == User.id)
-            .filter(User.department == current_user.department)
-        )
-
-    if start_date:
-        query = query.filter(
-            Activity.created_at >= start_date
-        )
-
-    if end_date:
-        query = query.filter(
-            Activity.created_at <= end_date
-        )
-
-    total_activities = query.count()
-
-    active_users = query.with_entities(
-        Activity.user_id
-    ).distinct().count()
-
-    return {
-        "total_activities": total_activities,
-        "active_users": active_users
-    }
+    require_admin(current_user)
+    start, end = parse_dates(start_date, end_date)
+    return svc.get_decision_activity(db, group_by, start, end)
 
 
-# DECISION ACTIVITY
-@router.get("/decision-activity")
-def decision_activity(
-    start_date: Optional[datetime] = Query(default=None),
-    end_date: Optional[datetime] = Query(default=None),
+@router.get("/admin/user-activity")
+def admin_user_activity(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role not in ["Manager", "Administrator"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Manager or Administrator access required"
-        )
-
-    query = db.query(Decision)
-
-    if current_user.role == "Manager":
-        query = (
-            query
-            .join(User, Decision.created_by == User.id)
-            .filter(User.department == current_user.department)
-        )
-
-    if start_date:
-        query = query.filter(
-            Decision.created_at >= start_date
-        )
-
-    if end_date:
-        query = query.filter(
-            Decision.created_at <= end_date
-        )
-
-    decisions = (
-        query
-        .order_by(Decision.created_at.asc())
-        .all()
-    )
-
-    activity = {}
-
-    for decision in decisions:
-        date_key = decision.created_at.date().isoformat()
-
-        if date_key not in activity:
-            activity[date_key] = 0
-
-        activity[date_key] += 1
-
-    return [
-        {
-            "date": date_key,
-            "decision_count": count
-        }
-        for date_key, count in activity.items()
-    ]
+    require_admin(current_user)
+    return svc.get_user_activity(db)

@@ -1,17 +1,17 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class DiscussionThreadCreate(BaseModel):
     title: str
-    description: str
+    description: str | None = None
 
 
 class DiscussionThreadUpdate(BaseModel):
-    title: str
-    description: str
-    status: str
+    title: str | None = None
+    description: str | None = None
+    status: str | None = None
 
 
 class DiscussionThreadResponse(BaseModel):
@@ -19,10 +19,9 @@ class DiscussionThreadResponse(BaseModel):
     decision_id: int
     created_by: int
     title: str
-    description: str
+    description: str | None
     status: str
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

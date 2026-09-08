@@ -6,5 +6,8 @@ class RationaleUpdate(BaseModel):
 
 
 class RationaleResponse(BaseModel):
-    decision_id: int
-    rationale: str | None
+    id: int
+    rationale: str
+
+    class Config:
+        from_attributes = True

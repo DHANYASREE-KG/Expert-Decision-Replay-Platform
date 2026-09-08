@@ -1,13 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.core.security import verify_password, create_access_token
-from app.db.database import get_db
+from app.db.session import get_db
 from app.models.user import User
-from app.schemas.audit_log import AuditAction, AuditEntityType
-from app.services.audit_service import log_audit
-
+from app.core.security import verify_password, create_access_token
+from app.schemas.auth import LoginRequest, TokenResponse
+from app.services.audit_service import log_security
 
 router = APIRouter(
     prefix="/auth",
@@ -15,50 +13,59 @@ router = APIRouter(
 )
 
 
-@router.post("/login")
+@router.post("/login", response_model=TokenResponse)
 def login(
+    login_data: LoginRequest,
     request: Request,
-    form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(
-        User.email == form_data.username
-    ).first()
+    ip = request.client.host if request.client else None
 
-    client_ip = (
-        request.client.host
-        if request.client
-        else None
+    user = (
+        db.query(User)
+        .filter(User.email == login_data.email)
+        .first()
     )
 
-    if not user or not verify_password(
-        form_data.password,
-        user.password
-    ):
-        # Do not create a user-linked audit record here because
-        # authentication failed and the user may not exist.
+    if not user:
+        log_security(
+            db,
+            event_type="LOGIN_FAILED",
+            email=login_data.email,
+            description=f"Failed login attempt for email: {login_data.email}",
+            ip_address=ip,
+        )
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Invalid email or password"
         )
 
-    access_token = create_access_token(
-        data={"sub": str(user.id)}
-    )
+    if not verify_password(login_data.password, user.password):
+        log_security(
+            db,
+            event_type="LOGIN_FAILED",
+            user_id=user.id,
+            email=login_data.email,
+            description=f"Failed login attempt for user {user.id}",
+            ip_address=ip,
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
 
-    log_audit(
-        db=db,
+    access_token = create_access_token(user.id)
+
+    log_security(
+        db,
+        event_type="LOGIN_SUCCESS",
         user_id=user.id,
-        action=AuditAction.LOGIN,
-        entity_type=AuditEntityType.USER,
-        entity_id=user.id,
+        email=login_data.email,
         description=f"User {user.id} logged in successfully",
-        ip_address=client_ip,
-        request_method="POST",
-        endpoint="/auth/login"
+        ip_address=ip,
     )
-
     db.commit()
 
     return {

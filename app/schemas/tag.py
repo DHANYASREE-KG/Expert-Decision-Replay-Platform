@@ -1,10 +1,10 @@
 from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict, Field
+from typing import List
+from pydantic import BaseModel, ConfigDict
 
 
 class TagCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
+    name: str
 
 
 class TagResponse(BaseModel):
@@ -15,5 +15,5 @@ class TagResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class DecisionTagsUpdate(BaseModel):
-    tag_ids: list[int] = Field(min_length=1)
+class TagAssignment(BaseModel):
+    tag_ids: List[int]

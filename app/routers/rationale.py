@@ -1,77 +1,104 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.db.database import get_db
+from app.core.security import get_current_user
+from app.db.session import get_db
 from app.models.decision import Decision
-from app.schemas.rationale import (
-    RationaleUpdate,
-    RationaleResponse,
-)
-from app.routers.users import get_current_user
-
+from app.models.user import User
+from app.schemas.rationale import RationaleUpdate
 
 router = APIRouter(
-    tags=["Decision Rationale"]
+    prefix="/decisions",
+    tags=["Decision Rationale"],
 )
 
 
-# UPDATE DECISION RATIONALE
-@router.put(
-    "/decisions/{decision_id}/rationale",
-    response_model=RationaleResponse
-)
+# CREATE / UPDATE RATIONALE
+@router.put("/{decision_id}/rationale")
 def update_rationale(
     decision_id: int,
-    rationale_data: RationaleUpdate,
+    data: RationaleUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    decision = (
-        db.query(Decision)
-        .filter(Decision.id == decision_id)
-        .first()
-    )
+    decision = db.query(Decision).filter(
+        Decision.id == decision_id
+    ).first()
 
-    if not decision:
+    if decision is None:
         raise HTTPException(
-            status_code=404,
-            detail="Decision not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision not found",
         )
 
-    decision.rationale = rationale_data.rationale
+    decision.rationale = data.rationale
 
     db.commit()
     db.refresh(decision)
 
     return {
-        "decision_id": decision.id,
-        "rationale": decision.rationale
+        "id": decision.id,
+        "rationale": decision.rationale,
     }
 
 
-# GET DECISION RATIONALE
-@router.get(
-    "/decisions/{decision_id}/rationale",
-    response_model=RationaleResponse
-)
+# GET RATIONALE
+@router.get("/{decision_id}/rationale")
 def get_rationale(
     decision_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    decision = (
-        db.query(Decision)
-        .filter(Decision.id == decision_id)
-        .first()
-    )
+    decision = db.query(Decision).filter(
+        Decision.id == decision_id
+    ).first()
 
-    if not decision:
+    if decision is None:
         raise HTTPException(
-            status_code=404,
-            detail="Decision not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision not found",
+        )
+
+    if decision.rationale is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision rationale not found",
         )
 
     return {
-        "decision_id": decision.id,
-        "rationale": decision.rationale
+        "id": decision.id,
+        "rationale": decision.rationale,
+    }
+
+
+# DELETE RATIONALE
+@router.delete("/{decision_id}/rationale")
+def delete_rationale(
+    decision_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    decision = db.query(Decision).filter(
+        Decision.id == decision_id
+    ).first()
+
+    if decision is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision not found",
+        )
+
+    if decision.rationale is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Decision rationale not found",
+        )
+
+    decision.rationale = None
+
+    db.commit()
+    db.refresh(decision)
+
+    return {
+        "message": "Decision rationale deleted successfully"
     }

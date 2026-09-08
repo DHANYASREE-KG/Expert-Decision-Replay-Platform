@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
-from sqlalchemy.orm import relationship
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -9,36 +9,50 @@ from app.db.base import Base
 class MeetingNote(Base):
     __tablename__ = "meeting_notes"
 
-    id = Column(Integer, primary_key=True, index=True)
-
-    decision_id = Column(
+    id: Mapped[int] = mapped_column(
         Integer,
+        primary_key=True,
+        index=True
+    )
+
+    decision_id: Mapped[int] = mapped_column(
         ForeignKey("decisions.id"),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
-    user_id = Column(
-        Integer,
+    created_by: Mapped[int] = mapped_column(
         ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    title: Mapped[str] = mapped_column(
+        String(255),
         nullable=False
     )
 
-    content = Column(
-        String,
+    content: Mapped[str] = mapped_column(
+        Text,
         nullable=False
     )
 
-    created_at = Column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc)
+    meeting_date: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False
     )
 
-    updated_at = Column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False
     )
 
     decision = relationship(
@@ -46,7 +60,7 @@ class MeetingNote(Base):
         back_populates="meeting_notes"
     )
 
-    user = relationship(
+    creator = relationship(
         "User",
         back_populates="meeting_notes"
     )

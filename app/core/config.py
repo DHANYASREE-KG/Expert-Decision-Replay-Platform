@@ -2,12 +2,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "Expert Decision Replay Platform"
-    database_url: str
-    jwt_secret_key: str
+    APP_NAME: str
+    DATABASE_URL: str
+    SECRET_KEY: str = "kslxmUT21DDS7rElQRYx62uVVjnj6V9Ccg5ANqVKIJg"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file="app/.env",
         extra="ignore"
     )
 

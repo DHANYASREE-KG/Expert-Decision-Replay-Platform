@@ -1,66 +1,40 @@
-from datetime import datetime, timezone
-
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, Integer, Text, DateTime, ForeignKey
+from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-
 from app.db.base import Base
 
 
 class DecisionVersion(Base):
     __tablename__ = "decision_versions"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True
-    )
+    id = Column(Integer, primary_key=True, index=True)
 
     decision_id = Column(
         Integer,
         ForeignKey("decisions.id"),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
-    version_number = Column(
-        Integer,
-        nullable=False
-    )
+    version_number = Column(Integer, nullable=False)
 
-    title = Column(
-        String,
-        nullable=False
-    )
+    title = Column(Text, nullable=False)
 
-    problem_statement = Column(
-        Text,
-        nullable=False
-    )
+    description = Column(Text, nullable=True)
 
-    category = Column(
-        String,
-        nullable=False
-    )
+    status = Column(Text, nullable=False)
 
-    status = Column(
-        String,
-        nullable=False
-    )
-
-    changed_by = Column(
+    created_by = Column(
         Integer,
         ForeignKey("users.id"),
-        nullable=False
-    )
-
-    change_summary = Column(
-        Text,
-        nullable=True
+        nullable=False,
+        index=True
     )
 
     created_at = Column(
         DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc)
+        server_default=func.now(),
+        nullable=False
     )
 
     decision = relationship(
