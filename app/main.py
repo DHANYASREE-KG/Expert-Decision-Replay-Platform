@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import (
     auth,
@@ -22,6 +23,15 @@ app = FastAPI(
     title="Expert Decision Replay Platform"
 )
 
+# CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(decision.router)
@@ -37,6 +47,7 @@ app.include_router(dashboard.router)
 app.include_router(activities.router)
 app.include_router(audit_logs.router)
 app.include_router(reports.router)
+
 @app.get("/")
 def root():
     return {
