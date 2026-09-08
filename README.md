@@ -1,3 +1,15 @@
+## Frontend Technology Stack
+
+The frontend is served by FastAPI and uses:
+
+- HTML5 for page structure
+- CSS3 for the custom responsive design system
+- Vanilla JavaScript for API integration and interactions
+- Bootstrap 5 for responsive layout and component primitives
+- Tailwind CSS for utility classes
+
+Open `/` after starting the FastAPI application to use the frontend.
+
 # Expert Decision Replay Platform
 
 ## Description

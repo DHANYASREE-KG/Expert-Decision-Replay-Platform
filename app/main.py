@@ -18,6 +18,15 @@ from app.routers.reports import router as reports_router
 app = FastAPI(
     title="Expert Decision Replay Platform"
 )
+from pathlib import Path
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
+
+@app.get("/", include_in_schema=False)
+def frontend():
+    return FileResponse(frontend_dir / "index.html")
 
 
 # User Management
