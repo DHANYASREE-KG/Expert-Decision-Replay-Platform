@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
 
@@ -170,6 +171,7 @@ def generate_pdf(
 
     story = []
 
+    # Report title
     story.append(
         Paragraph(
             title,
@@ -180,10 +182,29 @@ def generate_pdf(
     story.append(
         Spacer(
             1,
+            6,
+        )
+    )
+
+    # Generated date
+    generated_at = datetime.now(timezone.utc).astimezone()
+
+    story.append(
+        Paragraph(
+            f"<b>Generated:</b> "
+            f"{generated_at.strftime('%Y-%m-%d %H:%M:%S %z')}",
+            styles["Normal"],
+        )
+    )
+
+    story.append(
+        Spacer(
+            1,
             8,
         )
     )
 
+    # Filters
     if filters:
         filter_text = "<b>Filters:</b> "
 
@@ -213,6 +234,7 @@ def generate_pdf(
             )
         )
 
+    # Summary
     if summary:
         summary_text = "<b>Summary:</b> "
 
@@ -241,6 +263,7 @@ def generate_pdf(
             )
         )
 
+    # Table
     table_data = [
         columns
     ]
