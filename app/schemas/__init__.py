@@ -1,18 +1,3 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional
+from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
-
-class UserCreate(BaseModel):
-    full_name: str
-    email: EmailStr
-    role: str
-
-
-class UserResponse(BaseModel):
-    id: int
-    full_name: str
-    email: EmailStr
-    role: str
-
-    class Config:
-        from_attributes = True
+__all__ = ["UserCreate", "UserResponse", "UserUpdate"]

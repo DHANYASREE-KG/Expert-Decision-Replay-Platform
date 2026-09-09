@@ -56,3 +56,12 @@ class User(Base):
         "AccessLog",
         back_populates="user"
     )
+    approvals = relationship(
+        "Approval",
+        back_populates="reviewer"
+    )
+    team_memberships = relationship(
+        "TeamMember",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )

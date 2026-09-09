@@ -3,29 +3,166 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Decision Replay</title>
+  <title>Expert Decision Replay Platform</title>
+  <!-- Bootstrap 5 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <!-- Custom Stylesheet -->
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+  <!-- Toast Notification Container -->
   <div id="toast" class="toast" role="status"></div>
+
+  <!-- AUTHENTICATION SCREEN -->
   <section id="auth-screen" class="auth-screen min-h-screen">
-    <div class="auth-art"><span class="eyebrow">EXPERT DECISION REPLAY</span><h1>Make the reasoning<br><em>visible.</em></h1><p>A living record of the decisions that move your organization forward.</p><div class="art-line"></div></div>
-    <div class="auth-panel"><div class="brand-mark">DR<span>/</span></div><div id="auth-copy"><p class="eyebrow">WELCOME BACK</p><h2>Sign in to your workspace</h2><p class="muted">Continue where your team left off.</p></div>
-      <form id="login-form" class="form-stack"><label>Email<input name="username" type="email" placeholder="you@company.com" required></label><label>Password<input name="password" type="password" placeholder="Your password" required minlength="6"></label><button class="button primary" type="submit">Enter workspace <span>&rarr;</span></button><p id="login-error" class="form-error"></p></form>
-      <form id="register-form" class="form-stack hidden"><label>Full name<input name="full_name" placeholder="Your name" required></label><label>Work email<input name="email" type="email" placeholder="you@company.com" required></label><label>Password<input name="password" type="password" minlength="6" required></label><label>Role<select name="role"><option>Employee</option><option>Reviewer</option><option>Manager</option><option>Administrator</option></select></label><button class="button primary" type="submit">Create account <span>&rarr;</span></button><p id="register-error" class="form-error"></p></form>
-      <button id="auth-toggle" class="text-button" type="button">Need an account? Register</button>
+    <div class="auth-art">
+      <span class="eyebrow">EXPERT DECISION REPLAY</span>
+      <h1>Make organizational<br>reasoning <em>visible.</em></h1>
+      <p>A high-trust platform to capture, debate, approve, and replay pivotal enterprise decisions with full auditability.</p>
+      
+      <div class="art-line"></div>
+    </div>
+
+    <div class="auth-panel">
+      <div class="brand-mark">DR<span>/</span>Replay</div>
+      <div id="auth-copy">
+        <p class="eyebrow">WORKSPACE AUTHENTICATION</p>
+        <h2>Sign in to your account</h2>
+        <p class="muted">Access your organizational decision registry.</p>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" class="form-stack">
+        <label>Work Email or Full Name
+          <input name="email" id="login-email" type="text" placeholder="Enter email or username (e.g. admin@example.com, Sarah Connor)" required autocomplete="username">
+        </label>
+        <label>Password
+          <input name="password" id="login-password" type="password" placeholder="Enter your password" required minlength="6" autocomplete="current-password">
+        </label>
+        <label>Sign In Role Verification
+          <select name="role" id="login-role" class="form-select mt-1">
+            <option value="">Auto-Detect User Role</option>
+            <option value="Administrator">Administrator (Admin Portal)</option>
+            <option value="Manager">Manager</option>
+            <option value="Reviewer">Reviewer</option>
+            <option value="Employee">Employee</option>
+          </select>
+        </label>
+        <button class="button primary" type="submit">Sign In to Platform <span>&rarr;</span></button>
+        <div id="login-error" class="form-error-banner hidden" role="alert"></div>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" class="form-stack hidden">
+        <div class="row g-2">
+          <div class="col-12">
+            <label>Full Name
+              <input name="full_name" placeholder="Alice Smith" required>
+            </label>
+          </div>
+          <div class="col-12">
+            <label>Work Email
+              <input name="email" type="email" placeholder="alice@company.com" required>
+            </label>
+          </div>
+          <div class="col-6">
+            <label>Role
+              <select name="role" required>
+                <option value="Employee">Employee</option>
+                <option value="Reviewer">Reviewer</option>
+                <option value="Manager">Manager</option>
+                <option value="Administrator">Administrator</option>
+              </select>
+            </label>
+          </div>
+          <div class="col-6">
+            <label>Employee ID
+              <input name="employee_id" placeholder="EMP-100">
+            </label>
+          </div>
+          <div class="col-6">
+            <label>Department
+              <input name="department" placeholder="Engineering">
+            </label>
+          </div>
+          <div class="col-6">
+            <label>Designation
+              <input name="designation" placeholder="Backend Engineer">
+            </label>
+          </div>
+          <div class="col-12">
+            <label>Phone Number
+              <input name="phone_number" placeholder="+1-555-0199">
+            </label>
+          </div>
+          <div class="col-12">
+            <label>Password (min 6 chars)
+              <input name="password" type="password" minlength="6" required placeholder="Choose a password">
+            </label>
+          </div>
+        </div>
+        <button class="button primary mt-2" type="submit">Create Account <span>&rarr;</span></button>
+        <p id="register-error" class="form-error"></p>
+      </form>
+
+      <button id="auth-toggle" class="text-button" type="button">Need an account? Register new user</button>
     </div>
   </section>
+
+  <!-- MAIN APPLICATION SHELL -->
   <div id="app-shell" class="app-shell hidden min-vh-100">
-    <aside class="sidebar"><div class="brand-mark">DR<span>/</span></div><div class="sidebar-label">Workspace</div><nav id="nav"></nav><div class="sidebar-foot"><div id="user-chip" class="user-chip"></div><button id="logout" class="text-button">Sign out</button></div></aside>
-    <main class="main"><header class="topbar"><button id="menu-toggle" class="icon-button" aria-label="Open menu">&#9776;</button><div><p class="eyebrow" id="section-kicker">OVERVIEW</p><h2 id="page-title">Dashboard</h2></div><div class="topbar-actions"><span id="role-badge" class="role-badge"></span><button class="icon-button" title="Notifications">&#9671;</button></div></header><div id="content" class="content"></div></main>
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand-mark">DR<span>/</span>Replay</div>
+      <div class="sidebar-label">Navigation</div>
+      <nav id="nav"></nav>
+      <div class="sidebar-foot">
+        <div id="user-chip" class="user-chip"></div>
+        <button id="logout" class="text-button text-danger">Sign out</button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main">
+      <header class="topbar">
+        <button id="menu-toggle" class="icon-button" aria-label="Open menu">&#9776;</button>
+        <div>
+          <p class="eyebrow" id="section-kicker">OVERVIEW</p>
+          <h2 id="page-title">Dashboard</h2>
+        </div>
+        <div class="topbar-actions">
+          <span id="role-badge" class="role-badge"></span>
+          <button class="icon-button" title="Refresh Current View" onclick="render()">&#8635;</button>
+        </div>
+      </header>
+      <div id="content" class="content"></div>
+    </main>
   </div>
+
+  <!-- GENERIC APPLICATION MODAL -->
+  <div class="modal fade" id="crud-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+        <div class="modal-header border-bottom py-3 px-4" style="background: #fafaf7;">
+          <h5 class="modal-title fw-bold" id="modal-title">Modal Title</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body p-4" id="modal-body">
+          <!-- Dynamic Form / Content Injected Here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap 5 Bundle JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Pure Vanilla JS Logic -->
   <script src="/static/app.js"></script>
 </body>
 </html>

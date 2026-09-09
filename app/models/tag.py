@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 from app.models.decision_tag import decision_tags
@@ -26,8 +27,10 @@ class Tag(Base):
     created_at = Column(
         DateTime,
         default=datetime.utcnow,
+        server_default=func.now(),
         nullable=False
     )
+
 
     decisions = relationship(
         "Decision",

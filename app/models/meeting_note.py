@@ -2,8 +2,10 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
+
 
 
 class MeetingNote(Base):
@@ -45,15 +47,18 @@ class MeetingNote(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+        server_default=func.now(),
         nullable=False
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+        server_default=func.now(),
         onupdate=datetime.utcnow,
         nullable=False
     )
+
 
     decision = relationship(
         "Decision",

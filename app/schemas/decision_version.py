@@ -1,6 +1,5 @@
 from datetime import datetime
-
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class DecisionVersionCreate(BaseModel):
@@ -10,6 +9,8 @@ class DecisionVersionCreate(BaseModel):
 
 
 class DecisionVersionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     decision_id: int
     created_by: int
@@ -18,6 +19,3 @@ class DecisionVersionResponse(BaseModel):
     description: str
     status: str
     created_at: datetime
-
-    class Config:
-        from_attributes = True

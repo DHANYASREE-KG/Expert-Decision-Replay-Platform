@@ -5,6 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.db.base import Base
+from app.db.database import engine
+import app.models
+
 from app.routers import (
     auth,
     user,
@@ -21,19 +25,24 @@ from app.routers import (
     activities,
     audit_logs,
     reports,
+    approvals,
 )
 
+# Initialize all database tables
+Base.metadata.create_all(bind=engine)
+
 app = FastAPI(
-    title="Expert Decision Replay Platform"
+    title="Expert Decision Replay Platform",
+    version="1.0.0"
 )
 
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
-app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
+app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
 
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,7 +63,8 @@ app.include_router(dashboard.router)
 app.include_router(activities.router)
 app.include_router(audit_logs.router)
 app.include_router(reports.router)
+app.include_router(approvals.router)
 
 @app.get("/")
 def root():
-    return FileResponse(frontend_dir / "index.html")
+    return FileResponse(frontend_dir / "index.html")

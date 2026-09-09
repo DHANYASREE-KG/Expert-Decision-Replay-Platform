@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -37,11 +38,18 @@ class Approval(Base):
     assigned_at = Column(
         DateTime(timezone=True),
         nullable=False,
+        server_default=func.now(),
         default=lambda: datetime.now(timezone.utc)
     )
 
+
     completed_at = Column(
         DateTime(timezone=True),
+        nullable=True
+    )
+
+    comments = Column(
+        String,
         nullable=True
     )
 

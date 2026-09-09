@@ -14,13 +14,13 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
 def require_manager(current_user: User):
-    if current_user.role not in ("Manager", "Administrator"):
+    if (current_user.role or "").lower() not in ("manager", "administrator", "admin"):
         raise HTTPException(status_code=403, detail="Manager access required")
     return current_user
 
 
 def require_admin(current_user: User):
-    if current_user.role != "Administrator":
+    if (current_user.role or "").lower() not in ("administrator", "admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 

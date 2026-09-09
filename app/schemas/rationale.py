@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class RationaleUpdate(BaseModel):
@@ -6,8 +6,7 @@ class RationaleUpdate(BaseModel):
 
 
 class RationaleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     rationale: str
-
-    class Config:
-        from_attributes = True

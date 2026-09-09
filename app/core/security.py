@@ -40,6 +40,15 @@ def create_access_token(user_id: int) -> str:
     )
 
 
+def decode_access_token(token: str) -> dict:
+    return jwt.decode(
+        token,
+        settings.SECRET_KEY,
+        algorithms=[settings.ALGORITHM],
+    )
+
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
@@ -77,3 +86,23 @@ def get_current_user(
         raise unauthorized
 
     return user
+
+
+def get_optional_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User | None:
+    if credentials is None or not credentials.credentials:
+        return None
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+        user_id = payload.get("sub")
+        if user_id is not None:
+            return db.query(User).filter(User.id == int(user_id)).first()
+    except Exception:
+        return None
+    return None

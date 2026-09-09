@@ -2,6 +2,8 @@ from datetime import datetime
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 
 from app.db.base import Base
 from app.models.decision_tag import decision_tags
@@ -51,15 +53,18 @@ class Decision(Base):
     created_at = Column(
         DateTime,
         default=datetime.utcnow,
+        server_default=func.now(),
         nullable=False
     )
 
     updated_at = Column(
         DateTime,
         default=datetime.utcnow,
+        server_default=func.now(),
         onupdate=datetime.utcnow,
         nullable=False
     )
+
 
     # User who created the decision
     creator = relationship(
@@ -108,4 +113,10 @@ class Decision(Base):
         secondary=decision_tags,
         back_populates="decisions"
     )
-    
+
+    # Decision → Approvals
+    approvals = relationship(
+        "Approval",
+        back_populates="decision",
+        cascade="all, delete-orphan"
+    )

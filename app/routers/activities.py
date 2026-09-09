@@ -26,7 +26,7 @@ def get_activities(
     query = db.query(ActivityLog)
 
     # Non-admins only see their own activities
-    if current_user.role != "admin":
+    if current_user.role.lower() not in ("admin", "administrator"):
         query = query.filter(ActivityLog.user_id == current_user.id)
     elif user_id:
         query = query.filter(ActivityLog.user_id == user_id)

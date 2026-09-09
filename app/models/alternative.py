@@ -10,6 +10,7 @@ from sqlalchemy import (
     Text
 )
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -68,15 +69,18 @@ class Alternative(Base):
     created_at = Column(
         DateTime,
         default=datetime.utcnow,
+        server_default=func.now(),
         nullable=False
     )
 
     updated_at = Column(
         DateTime,
         default=datetime.utcnow,
+        server_default=func.now(),
         onupdate=datetime.utcnow,
         nullable=False
     )
+
 
     decision = relationship(
         "Decision",

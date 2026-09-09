@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -26,8 +27,10 @@ class TeamMember(Base):
     joined_at = Column(
         DateTime(timezone=True),
         nullable=False,
+        server_default=func.now(),
         default=lambda: datetime.now(timezone.utc)
     )
+
 
     team = relationship(
         "Team",

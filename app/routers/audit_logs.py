@@ -24,7 +24,7 @@ VALID_ENTITY_TYPES = [
 
 
 def require_admin(current_user: User):
-    if current_user.role != "Administrator":
+    if (current_user.role or "").lower() not in ("administrator", "admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 

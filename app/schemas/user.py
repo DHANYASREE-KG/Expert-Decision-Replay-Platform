@@ -1,7 +1,6 @@
 from enum import Enum
 from typing import Optional
-
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 
 class UserRole(str, Enum):
@@ -12,14 +11,15 @@ class UserRole(str, Enum):
 
 
 class UserCreate(BaseModel):
+    id: Optional[int] = None
     full_name: str
     email: EmailStr
-    role: UserRole
-    employee_id: str
-    department: str
-    designation: str
-    phone_number: str
-    password: str = Field(min_length=8, max_length=72)
+    role: UserRole = UserRole.EMPLOYEE
+    employee_id: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    phone_number: Optional[str] = None
+    password: str = Field(min_length=6, max_length=72)
 
 
 class UserUpdate(BaseModel):
@@ -30,28 +30,30 @@ class UserUpdate(BaseModel):
     department: Optional[str] = None
     designation: Optional[str] = None
     phone_number: Optional[str] = None
-    password: Optional[str] = Field(default=None, min_length=8, max_length=72)
+    password: Optional[str] = Field(default=None, min_length=6, max_length=72)
 
 
 class UserResponse(BaseModel):
     id: int
     full_name: str
     email: EmailStr
-    role: UserRole
+    role: str
     employee_id: Optional[str] = None
     department: Optional[str] = None
     designation: Optional[str] = None
     phone_number: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=72)
+    email: str = Field(..., description="User email, full name, or employee ID")
+    password: str = Field(..., min_length=1)
+    role: Optional[str] = Field(None, description="Optional target role requirement")
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    role: Optional[str] = None
+    user_id: Optional[int] = None

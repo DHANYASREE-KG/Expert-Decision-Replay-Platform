@@ -76,7 +76,8 @@ def create_approval(
         reviewer_id=approval_data.reviewer_id,
         approval_level=approval_data.approval_level,
         status=approval_data.status,
-        assigned_at=datetime.now(timezone.utc)
+        assigned_at=datetime.now(timezone.utc),
+        comments=approval_data.comments
     )
 
     db.add(approval)
@@ -274,10 +275,10 @@ def update_approval(
         elif approval_data.completed_at is not None:
             approval.completed_at = approval_data.completed_at
 
-    elif approval_data.completed_at is not None:
-        approval.completed_at = approval_data.completed_at
+    if approval_data.comments is not None:
+        approval.comments = approval_data.comments
 
     db.commit()
     db.refresh(approval)
 
-    return approval
+    return approval
