@@ -65,6 +65,14 @@ app.include_router(audit_logs.router)
 app.include_router(reports.router)
 app.include_router(approvals.router)
 
+@app.get("/health")
+def health_check():
+    return {
+        "status": "ok",
+        "service": "Expert Decision Replay Platform"
+    }
+
+
 @app.get("/")
 def root():
     return FileResponse(frontend_dir / "index.html")

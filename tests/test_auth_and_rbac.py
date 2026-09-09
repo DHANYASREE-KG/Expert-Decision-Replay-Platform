@@ -170,3 +170,61 @@ def test_strict_rbac_endpoint_access(client):
     # 4. User Deletion: Non-admin cannot delete other users
     assert client.delete("/users/4", headers=mgr_headers).status_code == 403
     assert client.delete("/users/4", headers=emp_headers).status_code == 403
+
+
+def test_privileged_user_creation_rbac(client):
+    # 1. Unauthenticated / Normal registration of an Employee succeeds
+    res_emp = client.post("/users", json={
+        "full_name": "Normal Employee",
+        "email": "normal.emp@testcorp.com",
+        "role": "Employee",
+        "employee_id": "EMP-999",
+        "password": "Password123"
+    })
+    assert res_emp.status_code == 201
+    assert res_emp.json()["role"] == "Employee"
+
+    # 2. Unauthenticated attempt to register a Manager fails with 403
+    res_mgr = client.post("/users", json={
+        "full_name": "Naveena Test",
+        "email": "naveena.test@testcorp.com",
+        "role": "Manager",
+        "employee_id": "EMP-998",
+        "password": "Password123"
+    })
+    assert res_mgr.status_code == 403
+    assert "Only administrators can create privileged users" in res_mgr.json()["detail"]
+
+    # 3. Unauthenticated attempt to register a Reviewer fails with 403
+    res_rev = client.post("/users", json={
+        "full_name": "Reviewer Test",
+        "email": "reviewer.test@testcorp.com",
+        "role": "Reviewer",
+        "password": "Password123"
+    })
+    assert res_rev.status_code == 403
+    assert "Only administrators can create privileged users" in res_rev.json()["detail"]
+
+    # 4. Unauthenticated attempt to register an Administrator fails with 403
+    res_adm = client.post("/users", json={
+        "full_name": "Admin Test",
+        "email": "admin.test@testcorp.com",
+        "role": "Administrator",
+        "password": "Password123"
+    })
+    assert res_adm.status_code == 403
+    assert "Only administrators can create privileged users" in res_adm.json()["detail"]
+
+    # 5. Authenticated Administrator can create any privileged role
+    adm_token = client.post("/auth/login", json={"email": "admin@example.com", "password": "Pass1234"}).json()["access_token"]
+    adm_headers = {"Authorization": f"Bearer {adm_token}"}
+
+    res_admin_created_mgr = client.post("/users", json={
+        "full_name": "Authorized Manager",
+        "email": "auth.manager@testcorp.com",
+        "role": "Manager",
+        "employee_id": "EMP-888",
+        "password": "Password123"
+    }, headers=adm_headers)
+    assert res_admin_created_mgr.status_code == 201
+    assert res_admin_created_mgr.json()["role"] == "Manager"

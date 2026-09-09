@@ -64,4 +64,23 @@ class User(Base):
         "TeamMember",
         back_populates="user",
         cascade="all, delete-orphan"
-    )
+    )
+
+    def __getitem__(self, key):
+        if key == "sub":
+            return str(self.id)
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
+
+    def get(self, key, default=None):
+        if key == "sub":
+            return str(self.id)
+        if hasattr(self, key):
+            val = getattr(self, key)
+            return val if val is not None else default
+        return default
+
+    def keys(self):
+        return ["sub", "id", "full_name", "email", "role", "employee_id", "department", "designation", "phone_number"]
+

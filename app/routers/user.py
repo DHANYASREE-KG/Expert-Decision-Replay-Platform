@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.security import (
@@ -9,6 +10,7 @@ from app.core.security import (
     get_optional_current_user,
     hash_password,
     verify_password,
+    verify_token,
 )
 from app.db.session import get_db
 from app.models.user import User
@@ -27,7 +29,22 @@ router = APIRouter(
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
+def create_user(
+    user: UserCreate,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
+    target_role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    is_privileged = target_role.lower() in ("reviewer", "manager", "administrator", "admin")
+    is_admin = current_user is not None and (current_user.role or "").lower() in ("administrator", "admin")
+
+    # RBAC: Only Administrators can create privileged users (Reviewer, Manager, Administrator)
+    if is_privileged and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can create privileged users while normally reviewer and manager account is not created"
+        )
+
     # Check if ID already exists when explicit ID is passed
     if user.id is not None:
         if db.query(User).filter(User.id == user.id).first():
@@ -35,6 +52,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"User with ID {user.id} already exists"
             )
+
 
     # Check if email is already registered
     if db.query(User).filter(User.email == user.email).first():
@@ -102,7 +120,13 @@ def login(login_data: LoginRequest, db: Session = Depends(get_db)):
             )
 
     return {
-        "access_token": create_access_token(user.id),
+        "access_token": create_access_token(
+            data={
+                "sub": str(user.id),
+                "email": user.email,
+                "role": user.role,
+            }
+        ),
         "token_type": "bearer",
         "role": user.role,
         "user_id": user.id,
@@ -139,11 +163,20 @@ def update_user(
     current_user: Optional[User] = Depends(get_optional_current_user),
 ):
     # RBAC: Non-admins can only update their own profile; admin required to update others
-    if current_user is not None and current_user.id != user_id and current_user.role.lower() not in ("administrator", "admin"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Administrator access required to update other users"
-        )
+    if current_user is not None:
+        is_admin = current_user.role.lower() in ("administrator", "admin")
+        is_self = current_user.id == user_id
+        if not is_self and not is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Users can only update their own profile"
+            )
+        if user_data.role is not None and not is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only administrators can change roles"
+            )
+
 
     user = db.query(User).filter(User.id == user_id).first()
 
@@ -194,7 +227,7 @@ def delete_user(
     if current_user is not None and current_user.role.lower() not in ("administrator", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Administrator access required to delete users"
+            detail="Only administrators can delete users"
         )
 
     user = db.query(User).filter(User.id == user_id).first()

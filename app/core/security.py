@@ -23,15 +23,20 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(user_id: int) -> str:
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
+def create_access_token(data, email: str = None, role: str = None) -> str:
+    if isinstance(data, dict):
+        payload = data.copy()
+    else:
+        payload = {"sub": str(data)}
+        if email:
+            payload["email"] = email
+        if role:
+            payload["role"] = role
 
-    payload = {
-        "sub": str(user_id),
-        "exp": expires_at,
-    }
+    if "exp" not in payload:
+        payload["exp"] = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
 
     return jwt.encode(
         payload,
@@ -40,12 +45,24 @@ def create_access_token(user_id: int) -> str:
     )
 
 
+def verify_token(token: str) -> dict | None:
+    try:
+        return jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+    except Exception:
+        return None
+
+
 def decode_access_token(token: str) -> dict:
     return jwt.decode(
         token,
         settings.SECRET_KEY,
         algorithms=[settings.ALGORITHM],
     )
+
 
 
 

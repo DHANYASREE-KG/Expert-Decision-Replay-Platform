@@ -118,11 +118,11 @@ Expert-Decision-Replay-Platform/
 │   ├── test_full_sprint_lifecycle.py   # Complete 14-Sprint End-to-End integration suite
 │   └── test_user_management_crud.py    # 6-Scenario User Management test suite
 │
-├── database_schema.sql                 # Complete PostgreSQL DDL (16 tables)
-├── test_data.sql                       # Complete sample seed script for pgAdmin
 ├── requirements.txt                    # Python dependencies
+├── alembic.ini                         # Alembic database migrations configuration
 ├── .env.example                        # Template for environment variables
 └── README.md                           # Comprehensive documentation
+
 ```
 
 ---
@@ -139,31 +139,28 @@ Expert-Decision-Replay-Platform/
 
 The database can be configured in minutes using pgAdmin 4 or the `psql` command line:
 
-### Step 1: Create Database
+### Step 1: Create Database in pgAdmin 4
 1. Open **pgAdmin 4** and connect to your local PostgreSQL server.
 2. In the Object Browser, right-click **Databases** > **Create** > **Database...**.
 3. Set **Database** name to: `expert_decision_replay`.
 4. Click **Save**.
 
-### Step 2: Run DDL Schema (`database_schema.sql`)
-1. Select `expert_decision_replay` database in pgAdmin 4.
-2. Open the **Query Tool** (Alt+Shift+Q or click the database, then select **Tools** > **Query Tool**).
-3. Open or copy-paste the contents of [`database_schema.sql`](./database_schema.sql).
-4. Click **Execute** (F5).
-5. This creates all **16 relational tables** with proper primary keys, foreign keys, cascade rules, and timestamp defaults:
-   - `users`, `teams`, `team_members`, `tags`, `decision_tags`
-   - `decisions`, `alternatives`, `discussion_threads`, `comments`, `meeting_notes`, `decision_versions`, `approvals`
-   - `activity_logs`, `audit_logs`, `security_logs`, `access_logs`
+### Step 2: Apply Database Migrations with Alembic
+Run the standard Alembic migration command from the project root:
+```powershell
+alembic upgrade head
+```
+This automatically provisions all relational tables directly in PostgreSQL:
+- `users`, `teams`, `team_members`, `tags`, `decision_tags`
+- `decisions`, `alternatives`, `discussion_threads`, `comments`, `meeting_notes`, `decision_versions`, `approvals`, `decision_documents`
+- `activity_logs`, `audit_logs`, `security_logs`, `access_logs`, `alembic_version`
 
-### Step 3: Load Sample Test Data (`test_data.sql`)
-1. In the Query Tool, open or copy-paste the contents of [`test_data.sql`](./test_data.sql).
-2. Click **Execute** (F5).
-3. This populates realistic demo records:
-   - 5 default users with distinct roles (`Administrator`, `Manager`, `Reviewer`, `Employee`)
-   - Teams (`Architecture Board`, `CAC Review Council`)
-   - Realistic decisions (Cloud Migration, Event-Driven Architecture, Auth Gateway)
-   - Evaluated alternatives with pros, cons, costs, and risk scores
-   - Discussion threads, comments, meeting notes, and approval records
+### Step 3: Verify in pgAdmin 4
+1. In pgAdmin 4, navigate to:
+   `Databases` > `expert_decision_replay` > `Schemas` > `public` > `Tables`.
+2. Right-click **Tables** and select **Refresh**.
+3. You will see all tables including `users` and `alembic_version`.
+
 
 ---
 

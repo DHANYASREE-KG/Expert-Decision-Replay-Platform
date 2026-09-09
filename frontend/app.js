@@ -32,6 +32,11 @@ function toast(message, isError = false) {
   setTimeout(() => el.classList.remove('show'), 3200);
 }
 
+// Centralized API Base URL (auto-detects port 8000 vs Live Server / local origin)
+const API_BASE = (window.location.protocol === 'file:' || (window.location.port && window.location.port !== '8000'))
+  ? 'http://127.0.0.1:8000'
+  : '';
+
 // Centralized API Request Wrapper
 async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
@@ -43,7 +48,8 @@ async function api(path, options = {}) {
     options.body = JSON.stringify(options.body);
   }
 
-  const response = await fetch(path, { ...options, headers });
+  const fullUrl = path.startsWith('http') ? path : `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+  const response = await fetch(fullUrl, { ...options, headers });
 
   if (response.status === 401) {
     let detail = 'Authentication failed. Please check your credentials.';
@@ -112,7 +118,16 @@ async function boot() {
   try {
     const payload = JSON.parse(atob(state.token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
     const userId = payload.sub;
-    state.user = await api(`/users/${userId}`);
+    try {
+      state.user = await api(`/users/${userId}`);
+    } catch (apiErr) {
+      state.user = {
+        id: parseInt(userId, 10) || userId,
+        email: payload.email || 'user@example.com',
+        full_name: payload.email ? payload.email.split('@')[0] : 'User',
+        role: payload.role || 'Employee'
+      };
+    }
     showApp();
   } catch (err) {
     console.error('Session bootstrap failed:', err);

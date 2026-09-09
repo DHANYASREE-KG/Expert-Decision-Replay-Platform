@@ -67,12 +67,16 @@ def test_user_management_crud_six_scenarios():
         },
     ]
 
+    login_res = client.post("/auth/login", json={"email": "admin@example.com", "password": "Pass1234"})
+    admin_token = login_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
     created_ids = []
     for u in users_to_create:
         # Clean up in case already exists from previous runs
-        client.delete(f"/users/{u['id']}")
+        client.delete(f"/users/{u['id']}", headers=headers)
 
-        res = client.post("/users", json=u)
+        res = client.post("/users", json=u, headers=headers)
         assert res.status_code == 201, f"Failed to create user {u['email']}: {res.text}"
         data = res.json()
         assert data["email"] == u["email"]
@@ -83,7 +87,7 @@ def test_user_management_crud_six_scenarios():
     assert len(created_ids) >= 5, "At least 5 users must be created"
 
     # 2. Retrieve users
-    res = client.get("/users")
+    res = client.get("/users", headers=headers)
     assert res.status_code == 200, f"Failed to retrieve users: {res.text}"
     all_users = res.json()
     assert isinstance(all_users, list)
@@ -100,7 +104,7 @@ def test_user_management_crud_six_scenarios():
         "department": "Core Platform",
         "designation": "Senior Staff Engineer"
     }
-    res_up1 = client.put(f"/users/{created_ids[0]}", json=update_data_1)
+    res_up1 = client.put(f"/users/{created_ids[0]}", json=update_data_1, headers=headers)
     assert res_up1.status_code == 200, f"Update user 1 failed: {res_up1.text}"
     updated_1 = res_up1.json()
     assert updated_1["full_name"] == "Scenario User One Updated"
@@ -112,7 +116,7 @@ def test_user_management_crud_six_scenarios():
         "designation": "Principal QA Architect",
         "phone_number": "+1-555-9999"
     }
-    res_up2 = client.put(f"/users/{created_ids[1]}", json=update_data_2)
+    res_up2 = client.put(f"/users/{created_ids[1]}", json=update_data_2, headers=headers)
     assert res_up2.status_code == 200, f"Update user 2 failed: {res_up2.text}"
     updated_2 = res_up2.json()
     assert updated_2["designation"] == "Principal QA Architect"
@@ -121,12 +125,12 @@ def test_user_management_crud_six_scenarios():
 
     # 4. Delete one User (delete User 105)
     delete_id = created_ids[4]
-    res_del = client.delete(f"/users/{delete_id}")
+    res_del = client.delete(f"/users/{delete_id}", headers=headers)
     assert res_del.status_code == 200, f"Delete user failed: {res_del.text}"
     print(f"Scenario 4 PASSED: Deleted user {delete_id}: {res_del.json()}")
 
     # 5. Try retrieving deleted user
-    res_get_deleted = client.get(f"/users/{delete_id}")
+    res_get_deleted = client.get(f"/users/{delete_id}", headers=headers)
     assert res_get_deleted.status_code == 404, f"Expected 404 for deleted user, got {res_get_deleted.status_code}"
     print(f"Scenario 5 PASSED: Retrieving deleted user {delete_id} correctly returned 404 Not Found.")
 
@@ -139,13 +143,13 @@ def test_user_management_crud_six_scenarios():
         "employee_id": "SCEN-999",
         "password": "Password123"
     }
-    res_dup = client.post("/users", json=duplicate_user)
+    res_dup = client.post("/users", json=duplicate_user, headers=headers)
     assert res_dup.status_code == 409, f"Expected 409 Conflict for duplicate user ID, got {res_dup.status_code}"
     print(f"Scenario 6 PASSED: Creating user with existing ID {created_ids[0]} correctly returned 409 Conflict: {res_dup.json()['detail']}.")
 
     # Clean up remaining test users
     for uid in created_ids[:4]:
-        client.delete(f"/users/{uid}")
+        client.delete(f"/users/{uid}", headers=headers)
     print("--- All 6 Scenarios Passed Flawlessly! ---\n")
 
 

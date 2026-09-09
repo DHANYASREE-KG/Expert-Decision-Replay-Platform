@@ -89,15 +89,44 @@ def create_decision(
     response_model=List[DecisionResponse]
 )
 def get_decisions(
+    category: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    my_only: Optional[bool] = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    decisions = (
-        db.query(Decision)
-        .filter(Decision.created_by == current_user.id)
-        .order_by(Decision.created_at.desc())
-        .all()
-    )
+    query = db.query(Decision)
+    user_role = (current_user.role or "").strip()
+
+    # If my_only is requested, return only decisions created by current user
+    if my_only:
+        query = query.filter(Decision.created_by == current_user.id)
+    elif user_role not in ["Administrator", "Admin", "Manager", "Reviewer"]:
+        # Regular Employees see their own decisions plus any submitted/reviewed/approved decisions
+        query = query.filter(
+            or_(
+                Decision.created_by == current_user.id,
+                Decision.status.in_(["Under Review", "Approved", "Rejected", "Deprecated"])
+            )
+        )
+    # Administrators, Managers, and Reviewers see all decisions across the organization
+
+    if category:
+        query = query.filter(Decision.category == category)
+    if status:
+        query = query.filter(Decision.status == status)
+    if search:
+        s = f"%{search}%"
+        query = query.filter(
+            or_(
+                Decision.title.ilike(s),
+                Decision.problem_statement.ilike(s),
+                Decision.rationale.ilike(s)
+            )
+        )
+
+    decisions = query.order_by(Decision.created_at.desc()).all()
     return decisions
 
 

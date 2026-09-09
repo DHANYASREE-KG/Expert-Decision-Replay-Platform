@@ -82,7 +82,13 @@ def login(
                 detail=f"Access denied: Account '{user.full_name}' is a '{user.role}', but '{login_data.role}' role was required."
             )
 
-    access_token = create_access_token(user.id)
+    access_token = create_access_token(
+        data={
+            "sub": str(user.id),
+            "email": user.email,
+            "role": user.role,
+        }
+    )
 
     log_security(
         db,
