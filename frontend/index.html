@@ -11,13 +11,13 @@
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <!-- Custom Stylesheet -->
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
   <!-- Toast Notification Container -->
-  <div id="toast" class="toast" role="status"></div>
+  <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 9999;"></div>
 
   <!-- AUTHENTICATION SCREEN -->
   <section id="auth-screen" class="auth-screen min-h-screen">
@@ -39,19 +39,19 @@
 
       <!-- Login Form -->
       <form id="login-form" class="form-stack">
-        <label>Work Email or Full Name
-          <input name="email" id="login-email" type="text" placeholder="Enter email or username (e.g. admin@example.com, Sarah Connor)" required autocomplete="username">
+        <label>Work Email or Username
+          <input name="email" id="login-email" type="text" placeholder="e.g. admin@platform.com, Sarah Connor" required autocomplete="username">
         </label>
         <label>Password
           <input name="password" id="login-password" type="password" placeholder="Enter your password" required minlength="6" autocomplete="current-password">
         </label>
-        <label>Sign In Role Verification
+        <label>Sign In Role Verification (Optional)
           <select name="role" id="login-role" class="form-select mt-1">
             <option value="">Auto-Detect User Role</option>
-            <option value="Administrator">Administrator (Admin Portal)</option>
-            <option value="Manager">Manager</option>
-            <option value="Reviewer">Reviewer</option>
-            <option value="Employee">Employee</option>
+            <option value="Administrator">Administrator (System Portal)</option>
+            <option value="Manager">Manager (Leadership)</option>
+            <option value="Reviewer">Reviewer (Technical Review)</option>
+            <option value="Employee">Employee (Decision Maker)</option>
           </select>
         </label>
         <button class="button primary" type="submit">Sign In to Platform <span>&rarr;</span></button>
@@ -62,24 +62,24 @@
       <form id="register-form" class="form-stack hidden">
         <div class="row g-2">
           <div class="col-12">
-            <label>Full Name
+            <label>Full Name *
               <input name="full_name" placeholder="Alice Smith" required>
             </label>
           </div>
           <div class="col-12">
-            <label>Work Email
+            <label>Work Email *
               <input name="email" type="email" placeholder="alice@company.com" required>
             </label>
           </div>
           <div class="col-6">
-            <label>Role
+            <label>Role *
               <select name="role" required>
-                <option value="Employee">Employee</option>
+                <option value="Employee" selected>Employee</option>
                 <option value="Reviewer">Reviewer</option>
                 <option value="Manager">Manager</option>
                 <option value="Administrator">Administrator</option>
               </select>
-              <small class="muted" style="display:block; font-size:0.75rem; margin-top:3px; line-height:1.2;">Only Admin can create privileged roles</small>
+              <small class="muted" style="display:block; font-size:0.75rem; margin-top:3px; line-height:1.2;">Only Admin can assign privileged roles</small>
             </label>
           </div>
           <div class="col-6">
@@ -102,14 +102,19 @@
               <input name="phone_number" placeholder="+1-555-0199">
             </label>
           </div>
-          <div class="col-12">
-            <label>Password (min 6 chars)
-              <input name="password" type="password" minlength="6" required placeholder="Choose a password">
+          <div class="col-6">
+            <label>Password (min 6 chars) *
+              <input name="password" id="reg-password" type="password" minlength="6" required placeholder="Choose password">
+            </label>
+          </div>
+          <div class="col-6">
+            <label>Confirm Password *
+              <input name="confirm_password" id="reg-confirm-password" type="password" minlength="6" required placeholder="Confirm password">
             </label>
           </div>
         </div>
         <button class="button primary mt-2" type="submit">Create Account <span>&rarr;</span></button>
-        <p id="register-error" class="form-error"></p>
+        <div id="register-error" class="form-error-banner hidden mt-2" role="alert"></div>
       </form>
 
       <button id="auth-toggle" class="text-button" type="button">Need an account? Register new user</button>
@@ -139,7 +144,7 @@
         </div>
         <div class="topbar-actions">
           <span id="role-badge" class="role-badge"></span>
-          <button class="icon-button" title="Refresh Current View" onclick="render()">&#8635;</button>
+          <button class="icon-button" title="Refresh Current View" onclick="window.renderCurrentPage()">&#8635;</button>
         </div>
       </header>
       <div id="content" class="content"></div>
@@ -163,7 +168,7 @@
 
   <!-- Bootstrap 5 Bundle JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <!-- Pure Vanilla JS Logic -->
-  <script src="/static/app.js"></script>
+  <!-- Modular ES6 Application Bootstrap -->
+  <script type="module" src="/static/js/app.js"></script>
 </body>
 </html>

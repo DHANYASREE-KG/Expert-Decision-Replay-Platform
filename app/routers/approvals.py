@@ -13,6 +13,8 @@ from app.schemas.approvals.approval import (
     ApprovalResponse,
     ApprovalUpdate,
 )
+from app.services.activity_service import log_activity
+from app.services.audit_service import log_audit
 
 
 router = APIRouter(
@@ -80,9 +82,35 @@ def create_approval(
         comments=approval_data.comments
     )
 
+    if approval.status in ["Approved", "Rejected"]:
+        approval.completed_at = datetime.now(timezone.utc)
+        if approval.status == "Rejected":
+            decision.status = "Rejected"
+        elif approval.status == "Approved":
+            decision.status = "Approved" if approval.approval_level >= 2 else "Under Review"
+
     db.add(approval)
     db.commit()
     db.refresh(approval)
+
+    log_activity(
+        db,
+        user_id=current_user.id,
+        action="approval_created",
+        entity_type="approval",
+        entity_id=decision.id,
+        description=f"User {current_user.id} ({current_user.role}) recorded Level {approval.approval_level} approval with status {approval.status}"
+    )
+    log_audit(
+        db,
+        user_id=current_user.id,
+        action="VERDICT" if approval.status in ["Approved", "Rejected"] else "ASSIGN",
+        entity_type="Decision",
+        entity_id=decision.id,
+        description=f"Level {approval.approval_level} verdict {approval.status}: {approval.comments or 'Complies'}",
+        new_value={"status": decision.status, "approval_id": approval.id, "level": approval.approval_level}
+    )
+    db.commit()
 
     return approval
 
@@ -280,5 +308,24 @@ def update_approval(
 
     db.commit()
     db.refresh(approval)
+
+    log_activity(
+        db,
+        user_id=current_user.id,
+        action="approval_updated",
+        entity_type="approval",
+        entity_id=decision.id,
+        description=f"User {current_user.id} updated approval #{approval.id} to {approval.status}"
+    )
+    log_audit(
+        db,
+        user_id=current_user.id,
+        action="VERDICT" if approval.status in ["Approved", "Rejected"] else "UPDATE",
+        entity_type="Decision",
+        entity_id=decision.id,
+        description=f"Level {approval.approval_level} verdict {approval.status}: {approval.comments or 'Review recorded'}",
+        new_value={"status": decision.status, "approval_id": approval.id}
+    )
+    db.commit()
 
     return approval

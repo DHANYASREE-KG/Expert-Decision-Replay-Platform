@@ -26,6 +26,12 @@ def get_employee_dashboard(db: Session, user_id: int) -> dict:
         .all()
     )
 
+    recent_decisions = (
+        base.order_by(Decision.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
     return {
         "total_decisions": total,
         "draft_decisions": draft,
@@ -34,6 +40,7 @@ def get_employee_dashboard(db: Session, user_id: int) -> dict:
         "rejected_decisions": rejected,
         "pending_reviews": 0,
         "recent_activities": recent,
+        "recent_decisions": recent_decisions,
     }
 
 
@@ -56,15 +63,17 @@ def get_employee_recent_activities(db: Session, user_id: int) -> list:
     )
 
 def get_manager_team_user_ids(db: Session, manager: User) -> list:
-    """Get all users in the same department as the manager."""
-    if not manager.department:
-        return []
-    users = (
-        db.query(User.id)
-        .filter(User.department == manager.department)
-        .all()
-    )
-    return [u.id for u in users]
+    """Get all users in the same department as the manager, or all users if department not restricted."""
+    if manager.department:
+        users = (
+            db.query(User.id)
+            .filter(User.department == manager.department)
+            .all()
+        )
+        ids = [u.id for u in users]
+        if ids:
+            return ids
+    return [u.id for u in db.query(User.id).all()]
 
 
 def get_manager_dashboard(db: Session, manager: User) -> dict:

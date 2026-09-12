@@ -1,5 +1,5 @@
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -17,7 +17,7 @@ def generate_pdf(title: str, headers: list, rows: list, summary: dict = None) ->
     
     elements.append(Paragraph(title, styles["Title"]))
     elements.append(Paragraph(
-        f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
+        f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         styles["Normal"]
     ))
     elements.append(Spacer(1, 12))
@@ -68,7 +68,7 @@ def generate_excel(title: str, headers: list, rows: list, summary: dict = None) 
     
     ws.cell(row=row_num, column=1, value=title).font = Font(bold=True, size=14)
     row_num += 1
-    ws.cell(row=row_num, column=1, value=f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+    ws.cell(row=row_num, column=1, value=f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     row_num += 2
 
     

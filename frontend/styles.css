@@ -305,6 +305,7 @@ input:focus, select:focus, textarea:focus {
   border-radius: 12px;
   padding: 22px;
   box-shadow: var(--shadow);
+  min-width: 0;
 }
 .stat-card small { color: var(--muted); display: block; margin-bottom: 8px; font-weight: 600; }
 .stat-value { font: 700 32px 'Space Grotesk'; color: var(--green); }
@@ -347,7 +348,7 @@ tr:hover td { background: #fdfdfd; }
 .empty, .loading, .error-state { text-align: center; padding: 48px 20px; color: var(--muted); }
 .error-state { color: var(--coral); }
 
-.detail-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; }
+.detail-grid { width: 100%; }
 .detail-copy { line-height: 1.7; color: #334155; font-size: 15px; }
 
 /* TIMELINE */
@@ -368,6 +369,15 @@ tr:hover td { background: #fdfdfd; }
   background: var(--green);
 }
 .timeline-item small { color: var(--muted); }
+
+.version-node {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.version-node:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+.cursor-pointer { cursor: pointer; }
 
 /* TOAST */
 .toast {

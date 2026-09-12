@@ -17,6 +17,9 @@ class DecisionUpdate(BaseModel):
     rationale: Optional[str] = None
 
 
+from app.schemas.tag import TagResponse
+
+
 class DecisionResponse(BaseModel):
     id: int
     title: str
@@ -27,6 +30,7 @@ class DecisionResponse(BaseModel):
     created_by: int
     created_at: datetime
     updated_at: datetime
+    tags: List[TagResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 

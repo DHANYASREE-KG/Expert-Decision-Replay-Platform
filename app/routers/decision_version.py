@@ -123,6 +123,9 @@ def get_specific_version(
     return version
 
 
+from app.models.approval import Approval
+from app.models.audit_log import AuditLog
+
 @router.get("/{decision_id}/history")
 def get_decision_history(
     decision_id: int,
@@ -136,13 +139,41 @@ def get_decision_history(
 
     history = []
 
+    # 1. Decision Created
     history.append({
         "event": "Decision Created",
+        "action": "Created",
+        "changed_by": f"User #{decision.created_by}",
         "timestamp": decision.created_at,
-        "description": f"Decision '{decision.title}' was created",
+        "description": f"Initial draft '{decision.title}' captured",
     })
 
+    # 2. Decision Audited updates (like SUBMIT or UPDATE)
+    audit_events = (
+        db.query(AuditLog)
+        .filter(AuditLog.entity_type == "Decision", AuditLog.entity_id == decision_id)
+        .order_by(AuditLog.created_at)
+        .all()
+    )
+    for a in audit_events:
+        if a.action == "SUBMIT":
+            history.append({
+                "event": "Submitted for Review",
+                "action": "Submitted",
+                "changed_by": f"User #{a.user_id}",
+                "timestamp": a.created_at,
+                "description": "Decision formal peer & management review initiated",
+            })
+        elif a.action == "UPDATE" and a.created_at != decision.created_at:
+            history.append({
+                "event": "Decision Updated",
+                "action": "Updated",
+                "changed_by": f"User #{a.user_id}",
+                "timestamp": a.created_at,
+                "description": a.description or "Decision details revised",
+            })
 
+    # 3. Alternatives Added
     alternatives = (
         db.query(Alternative)
         .filter(Alternative.decision_id == decision_id)
@@ -152,25 +183,46 @@ def get_decision_history(
     for alt in alternatives:
         history.append({
             "event": "Alternative Added",
+            "action": "Alternative",
+            "changed_by": f"User #{decision.created_by}",
             "timestamp": alt.created_at,
-            "description": f"Alternative '{alt.name}' was added",
+            "description": f"Alternative option '{alt.name}' evaluated (Est: ${alt.estimated_cost})",
         })
 
-    
-    comments = (
-        db.query(Comment)
-        .filter(Comment.decision_id == decision_id)
-        .order_by(Comment.created_at)
+    # 4. Approvals
+    approvals = (
+        db.query(Approval)
+        .filter(Approval.decision_id == decision_id)
+        .order_by(Approval.assigned_at)
         .all()
     )
-    for comment in comments:
-        history.append({
-            "event": "Comment Added",
-            "timestamp": comment.created_at,
-            "description": "A comment was added",
-        })
+    for appr in approvals:
+        if appr.status == "Approved":
+            history.append({
+                "event": f"Level {appr.approval_level} Review Approved",
+                "action": "Approved",
+                "changed_by": f"Reviewer #{appr.reviewer_id}",
+                "timestamp": appr.completed_at or appr.assigned_at,
+                "description": f"Level {appr.approval_level} verdict APPROVED: {appr.comments or 'Complies with criteria'}",
+            })
+        elif appr.status == "Rejected":
+            history.append({
+                "event": f"Level {appr.approval_level} Review Rejected",
+                "action": "Rejected",
+                "changed_by": f"Reviewer #{appr.reviewer_id}",
+                "timestamp": appr.completed_at or appr.assigned_at,
+                "description": f"Level {appr.approval_level} verdict REJECTED: {appr.comments or 'Returned for revisions'}",
+            })
+        elif appr.status == "Pending":
+            history.append({
+                "event": f"Level {appr.approval_level} Review Assigned",
+                "action": "Assigned",
+                "changed_by": "System",
+                "timestamp": appr.assigned_at,
+                "description": f"Assigned to Reviewer #{appr.reviewer_id} for governance sign-off",
+            })
 
-    
+    # 5. Discussion Threads
     threads = (
         db.query(DiscussionThread)
         .filter(DiscussionThread.decision_id == decision_id)
@@ -179,12 +231,14 @@ def get_decision_history(
     )
     for thread in threads:
         history.append({
-            "event": "Discussion Thread Created",
+            "event": "Discussion Thread Started",
+            "action": "Discussion",
+            "changed_by": f"User #{thread.created_by}",
             "timestamp": thread.created_at,
-            "description": f"Thread '{thread.title}' was created",
+            "description": f"Debate opened: '{thread.title}'",
         })
 
-    
+    # 6. Explicit Versions
     versions = (
         db.query(DecisionVersion)
         .filter(DecisionVersion.decision_id == decision_id)
@@ -193,13 +247,13 @@ def get_decision_history(
     )
     for version in versions:
         history.append({
-            "event": f"Version {version.version_number} Created",
+            "event": f"Version {version.version_number} Snapshot",
+            "action": "Snapshot",
+            "changed_by": f"User #{version.created_by}",
             "timestamp": version.created_at,
-            "description": f"Decision version {version.version_number} was saved",
+            "description": f"Decision snapshot {version.version_number} saved: '{version.title}'",
         })
 
-    
-        
     def normalize(dt):
         if dt is None:
             return datetime.min
@@ -208,5 +262,9 @@ def get_decision_history(
         return dt
 
     history.sort(key=lambda x: normalize(x["timestamp"]))
+
+    # Assign sequential visual version numbers
+    for idx, item in enumerate(history, 1):
+        item["version_number"] = idx
 
     return {"decision_id": decision_id, "history": history}
